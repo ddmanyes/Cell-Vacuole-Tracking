@@ -21,3 +21,11 @@ Use TIFF time-lapse images to build a reproducible pipeline for cell segmentatio
 - results/*.csv
 - results/qc/*.png
 - README updates for running the pipeline
+
+## Progress
+- [x] Step 1: Verify TIFF metadata (shape, dtype, intensity range).
+- [x] Step 2: Pre-check dependencies with `uv lock --dry-run`.
+- [x] Step 3: Install dependencies and generate uv.lock.
+- [ ] Step 4: Implement batch pipeline script.
+- [ ] Step 5: Generate CSV outputs and QC overlays.
+- [ ] Step 6: Document usage and QC notes.
