@@ -24,7 +24,7 @@ from skimage.measure import regionprops, label as label_img
 from skimage.feature import blob_log, peak_local_max
 from skimage.filters import gaussian, threshold_otsu
 from skimage.morphology import remove_small_objects, binary_closing, disk
-from skimage.segmentation import watershed
+from skimage.segmentation import watershed, find_boundaries
 from scipy import ndimage
 import matplotlib.pyplot as plt
 from tqdm import tqdm
@@ -366,11 +366,11 @@ def create_qc_overlay(img, mask, frame_idx):
 
     ax = axes[0]
     ax.imshow(img, cmap='gray')
-
-    for label_id in np.unique(mask):
-        if label_id == 0:
-            continue
-        ax.contour((mask == label_id).astype(float), levels=[0.5], colors='cyan', linewidths=1)
+    boundaries = find_boundaries(mask, mode='outer')
+    overlay = np.zeros((*mask.shape, 4), dtype=np.float32)
+    overlay[..., 2] = 1.0
+    overlay[..., 3] = boundaries.astype(np.float32)
+    ax.imshow(overlay)
 
     ax.set_title(f'Frame {frame_idx}: Cells')
     ax.axis('off')
