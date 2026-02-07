@@ -102,7 +102,7 @@ def segment_cells(imgs):
     Returns:
         masks: (T, Y, X) label array with cell IDs
     """
-    model = models.Cellpose(gpu=True, model_type=CELLPOSE_MODEL)
+    model = models.CellposeModel(gpu=True, model_type=CELLPOSE_MODEL)
     masks, _, _, _ = model.eval(
         imgs,
         diameter=CELLPOSE_DIAMETER,
@@ -406,7 +406,7 @@ def main(sample_frame=None):
                 all_qc_imgs.append((tiff_file.name, qc_path))
                 
             except Exception as e:
-                print(f"❌ Error processing {tiff_file.name}: {e}")
+                print(f"[ERROR] Error processing {tiff_file.name}: {e}")
                 import traceback
                 traceback.print_exc()
     
