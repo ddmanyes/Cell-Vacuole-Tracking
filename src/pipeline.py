@@ -135,8 +135,17 @@ def track_cells(masks):
     frames_data = []
     
     for t in range(masks.shape[0]):
-        frame_mask = masks[t]
-        region_props = regionprops(frame_mask.astype(int))
+        frame_mask = masks[t].astype(int)  # Ensure int type for regionprops
+        # Handle both uint and int types
+        if frame_mask.dtype in [np.float32, np.float64]:
+            frame_mask = frame_mask.astype(int)
+        
+        try:
+            region_props = regionprops(frame_mask)
+        except TypeError as e:
+            # Skip frames where regionprops fails
+            print(f"Warning: regionprops failed for frame {t}: {e}")
+            continue
         
         for prop in region_props:
             cy, cx = prop.centroid
