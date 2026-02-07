@@ -103,12 +103,19 @@ def segment_cells(imgs):
         masks: (T, Y, X) label array with cell IDs
     """
     model = models.CellposeModel(gpu=True, model_type=CELLPOSE_MODEL)
-    masks, _, _, _ = model.eval(
+    # Cellpose 4.0+ returns only [masks, flows, styles]
+    result = model.eval(
         imgs,
         diameter=CELLPOSE_DIAMETER,
         channels=[0, 0],
         do_3D=False
     )
+    # Handle both 3-tuple and 4-tuple returns for compatibility
+    if len(result) == 3:
+        masks, flows, styles = result
+    else:
+        masks, flows, styles, _ = result
+    
     return masks
 
 # ============================================================================
