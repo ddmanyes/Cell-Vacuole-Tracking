@@ -11,7 +11,7 @@ Use TIFF time-lapse images to build a reproducible pipeline for cell segmentatio
 
 ## Steps
 1. Verify TIFF metadata (shape, dtype, intensity range) and report summary.
-2. Pre-check dependencies with uv dry-run (cellpose, laptrack, scikit-image, tifffile, numpy, pandas, tqdm, matplotlib).
+2. Pre-check dependencies by listing them in pyproject.toml and running `uv lock --dry-run` (cellpose, laptrack, scikit-image, tifffile, numpy, pandas, tqdm, matplotlib).
 3. Install dependencies after dry-run resolves cleanly.
 4. Implement a batch script to read TIFFs, run Cellpose, track cells, and detect bubbles.
 5. Generate CSV outputs and QC overlays for a small sample frame per file.
