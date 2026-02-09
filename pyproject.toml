@@ -7,10 +7,15 @@ requires-python = ">=3.10"
 dependencies = [
 	"cellpose",
 	"laptrack",
+	"pillow",
 	"scikit-image",
 	"tifffile",
 	"numpy",
 	"pandas",
 	"tqdm",
 	"matplotlib",
+	"scipy",
+	"networkx",
+	"cython",
+	"opencv-python",
 ]

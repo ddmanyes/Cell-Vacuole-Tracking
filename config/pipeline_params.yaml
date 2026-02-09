@@ -1,0 +1,86 @@
+# Pipeline parameter reference (not auto-loaded)
+
+input:
+  tiff_path: data/bafA1/Group 1_wellA1_RI_MIP_stitched.tiff
+
+output:
+  results_dir: results
+  qc_dir: results/qc
+
+segmentation:
+  method: cellpose
+  min_cell_area: 200
+  gaussian_sigma: 1.0
+  peak_footprint: 7
+  closing_disk: 5
+  label_expand_pixels: 3
+  target_coverage: 0.7
+  max_expand_iter: 25
+
+cellpose:
+  model_type: cyto3
+  diameter: 100
+  cellprob_threshold: 0.6
+  flow_threshold: 0.4
+  min_size: 0
+  use_clahe: true
+  bg_subtract: rolling_ball
+  rb_radius: 50
+  fill_holes_area: 0
+  closing_disk: 4
+
+bubble:
+  method: rb_clahe
+  blob_log:
+    min_sigma: 2
+    max_sigma: 15
+    threshold: 0.03
+    num_sigma: 3
+  tophat:
+    radius: 2
+    smooth_sigma: 0.6
+    min_area: 3
+    max_area: 120
+  watershed:
+    smooth_sigma: 1.0
+    intensity_threshold: 0.25
+    marker_quantile: 0.25
+  cellpose:
+    model_type: cyto3
+    diameter: 10
+    cellprob_threshold: 0.0
+    flow_threshold: 0.4
+    min_size: 0
+    smooth_sigma: 1.0
+  rb_clahe:
+    thresh: 0.28
+    min_area: 20
+    max_area: null
+    min_circularity: 0.1
+    clahe_clip: 0.06
+    rb_radius: 50
+  rb_clahe_qc:
+    thresh: 0.28
+    min_area: 20
+    max_area: null
+    min_circularity: 0.1
+
+bubble_qc_overlay:
+  min_sigma: 1
+  max_sigma: 8
+  threshold: 0.02
+
+tracking:
+  enabled: true
+  track_cost_cutoff: 50.0
+  splitting_cost_cutoff: false
+  merging_cost_cutoff: false
+
+runtime:
+  sample_frame: null
+  skip_tracking: false
+  max_frames: null
+
+intermediate:
+  save: false
+  dir: results/intermediates

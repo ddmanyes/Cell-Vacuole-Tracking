@@ -22,11 +22,11 @@
 
 - [2026-02-07 16:06:44] - 步驟: 實作批次分析腳本（Cellpose + LapTrack + 氣泡偵測） | 狀態: ✅ 成功
   - [🔄 點擊恢復至此階段](command:antigravity.restore?{"hash":"de975e84ad314a232c428bb80f755fe118c224ff","step":"實作批次分析腳本"})
-  - 位置：[src/pipeline.py](src/pipeline.py)
+  - 位置：[src/pipeline/pipeline.py](src/pipeline/pipeline.py)
   - 功能：分割、追蹤、氣泡偵測、CSV 輸出、QC 疊圖
 
 - [2026-02-07 18:12:10] - 步驟: 最佳化 bubble detection 效能（ROI 裁剪 + 減少尺度層） | 狀態: ✅ 成功
   - [🔄 點擊恢復至此階段](command:antigravity.restore?{"hash":"bb90abc","step":"最佳化 bubble detection 效能（ROI 裁剪 + 減少尺度層）"})
-  - 位置：[src/pipeline.py](src/pipeline.py)
+  - 位置：[src/pipeline/pipeline.py](src/pipeline/pipeline.py)
   - 報告位置：[docs/performance_optimization.md](docs/performance_optimization.md)
   - 結果：單幀處理約 106-117 秒，10 幀測試可在 ~20 分鐘內完成
