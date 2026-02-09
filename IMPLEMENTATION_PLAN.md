@@ -27,7 +27,7 @@ Use TIFF time-lapse images to build a reproducible pipeline for cell segmentatio
 - [x] Step 2: Pre-check dependencies with `uv lock --dry-run`.
 - [x] Step 3: Install dependencies and generate uv.lock.
 - [x] Step 4: Implement batch pipeline script (Added YAML config support).
-- [ ] Step 5: Generate CSV outputs and QC overlays.
+- [/] Step 5: Generate CSV outputs and QC overlays (Running verification script).
 - [x] Step 6: Document usage and QC notes (Metadata detailed in pyproject.toml).
 
 ## Recent Updates
