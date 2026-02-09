@@ -30,3 +30,20 @@
   - 位置：[src/pipeline/pipeline.py](src/pipeline/pipeline.py)
   - 報告位置：[docs/performance_optimization.md](docs/performance_optimization.md)
   - 結果：單幀處理約 106-117 秒，10 幀測試可在 ~20 分鐘內完成
+
+- [2026-02-09 21:17:46] Code Review 紀錄
+- **路由模型**: Gemini (Structure & Docs)
+- **複雜度評分**: 2 / 10
+- **判定理由**: README 更新請求與專案結構完整性檢查
+- **狀態**: ✅ 已完成審查
+- **重點發現**:
+  1. README 已更新為 `uv` 官方安裝流程。
+  2. `pipeline.py` 硬編碼參數與文件描述 (`yaml`) 不符。
+  3. `.gitignore` 可能導致 `sample/` 內的數據遺失。
+  4. `pyproject.toml` 缺少元數據。
+
+- [2026-02-09 21:30:00] - 步驟: 自動化修復與功能補齊 | 狀態: ✅ 完成
+  - **YAML 配置整合**: src/pipeline/pipeline.py 現已支援讀取 config/pipeline_params.yaml，並保留向下兼容的預設值。
+  - **元數據補齊**: 更新 pyproject.toml 增加作者與授權資訊，並加入 pytest 開發依賴。
+  - **版本控制優化**: 更新 .gitignore 允許追蹤 sample/ 內的 CSV 範例檔。
+  - [🔄 點擊恢復至此階段](command:antigravity.restore?{&quot;hash&quot;:&quot;HEAD&quot;,&quot;step&quot;:&quot;自動化修復與功能補齊&quot;})

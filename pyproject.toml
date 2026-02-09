@@ -1,21 +1,29 @@
 [project]
 name = "cell-vacuole-tracking"
 version = "0.1.0"
-description = "Add your description here"
+description = "Pipeline for segmenting cells, tracking them over time, and detecting intracellular bubbles."
 readme = "README.md"
 requires-python = ">=3.10"
+authors = [{name = "Chi Ru Chan", email = "chiruchan@example.com"}]
+license = {text = "MIT"}
 dependencies = [
-	"cellpose",
-	"laptrack",
-	"pillow",
-	"scikit-image",
-	"tifffile",
-	"numpy",
-	"pandas",
-	"tqdm",
-	"matplotlib",
-	"scipy",
-	"networkx",
-	"cython",
-	"opencv-python",
+    "cellpose",
+    "laptrack",
+    "pillow",
+    "scikit-image",
+    "tifffile",
+    "numpy",
+    "pandas",
+    "tqdm",
+    "matplotlib",
+    "scipy",
+    "networkx",
+    "cython",
+    "opencv-python",
+    "pyyaml",
+]
+
+[dependency-groups]
+dev = [
+    "pytest",
 ]

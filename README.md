@@ -24,143 +24,61 @@ Pipeline for segmenting cells, tracking them over time, and detecting intracellu
 
 ## Installation Instructions (macOS & Windows Compatible)
 
-This project recommends using a Python virtual environment to ensure dependency consistency and system security. The following steps apply to both macOS and Windows, with notes on common platform differences.
+This project recommends using `uv` for fast, reliable dependency management.
 
-### 1. Python Version Requirements
+### 1. Install uv
 
-- **Recommended versions**: Python 3.9 ~ 3.11
-- Do not use Python 3.12 (some scientific packages are not yet fully supported)
-
-### 2. Creating a Virtual Environment
-
-#### Using uv (recommended, fast and automatically handles dependencies)
-
+**macOS / Linux / WSL (Recommended)**
 ```bash
-# Install uv (if not already installed)
-pip install uv
-
-# Create a virtual environment
-uv venv .venv
-
-# Activate the virtual environment
-# macOS/Linux
-source .venv/bin/activate
-# Windows
-.venv\Scripts\activate
+curl -LsSf https://astral.sh/uv/install.sh | sh
 ```
 
-#### Or using venv + pip
-
-```bash
-# Create a virtual environment
-python -m venv .venv
-
-# Activate the virtual environment
-# macOS/Linux
-source .venv/bin/activate
-# Windows
-.venv\Scripts\activate
+**Windows (PowerShell)**
+```powershell
+powershell -c "irm https://astral.sh/uv/install.ps1 | iex"
 ```
 
-### 3. Installing Dependencies
+### 2. Install Dependencies
 
-#### Using uv (recommended - handles everything automatically)
+Sync the project dependencies from `pyproject.toml`:
 
 ```bash
-# Sync dependencies from pyproject.toml (creates/activates venv if needed)
-uv sync
-
-# Or if you prefer manual venv creation:
-uv venv .venv
-source .venv/bin/activate  # macOS/Linux
-# .venv\Scripts\activate   # Windows
 uv sync
 ```
 
-#### Alternative: Using pip
+This command will:
+1. Create a virtual environment (`.venv`) if one doesn't exist.
+2. Install all required packages into the environment.
 
-```bash
-pip install -r requirements.txt
-# or
-pip install .
-```
+### 3. Platform Notes
 
-### 4. Platform Differences and Notes
+- **C Compiler**: Some packages (`cellpose`, `scikit-image`) may require build tools.
+  - **Windows**: Install [Build Tools for Visual Studio](https://visualstudio.microsoft.com/visual-cpp-build-tools/).
+  - **macOS**: Install Xcode Command Line Tools (`xcode-select --install`).
+- **Permissions**: If you encounter permission errors, try running as Administrator (Windows) or use `sudo` (macOS/Linux) carefully, though `uv` installs to user directories by default.
 
-- **C Compiler Requirements**  
-  - Some packages (such as `scikit-image`, `cellpose`, `cython`) require a C/C++ compiler.
-  - **Windows**: It is recommended to install [Build Tools for Visual Studio](https://visualstudio.microsoft.com/visual-cpp-build-tools/).
-  - **macOS**: Install Xcode Command Line Tools (run `xcode-select --install`).
+### 4. Verifying Installation
 
-- **Pillow, tifffile**  
-  - Require system support for libjpeg, zlib, etc. On macOS, you can install via Homebrew; on Windows, it is usually handled automatically.
-
-- **cellpose/scikit-image**  
-  - These packages depend on numpy, scipy, cython. Ensure the installation order is correct (uv/pip will handle this automatically).
-
-- **Permission Issues**  
-  - On macOS, if you encounter permission issues during installation, add `--user` or use a virtual environment.
-  - On Windows, run the command prompt as administrator if you encounter permission errors.
-
-### 5. Dependency Integrity Check and Suggested Additions
-
-#### Required Scientific Packages (confirm they are included in requirements/pyproject):
-
-- numpy
-- scipy
-- pandas
-- matplotlib
-- scikit-image
-- tifffile
-- pillow
-- opencv-python
-- cellpose
-- networkx
-- cython
-
-#### Suggested Additions (consider adding if not listed in dependencies):
-
-- **scipy**: Commonly used for image processing and numerical operations
-- **networkx**: For cell tracking/graph analysis
-- **cython**: To accelerate some scientific packages
-- **opencv-python**: For image processing
-- **pytest**: For unit testing
-- **jupyter**: For interactive analysis
-- **tqdm**: For progress bars
-- **h5py**: If HDF5 format handling is needed
-- **pyyaml**: If YAML configuration parsing is needed
-
-> If there are omissions, please add them to `pyproject.toml` or `requirements.txt`.
-
-### 6. Verifying Installation Success
+Verify that the environment is set up correctly and all dependencies manage to load.
 
 #### Import Test
-
 ```bash
-# If using uv
-uv run python -c "import numpy; import scipy; import pandas; import matplotlib; import skimage; import tifffile; import PIL; import cv2; import cellpose; import networkx; import cython"
-
-# Or activate venv and run
-python -c "import numpy; import scipy; import pandas; import matplotlib; import skimage; import tifffile; import PIL; import cv2; import cellpose; import networkx; import cython"
+# Verify key imports
+uv run python -c "import cellpose; import laptrack; import skimage; import cv2; print('Imports successful')"
 ```
-- If no errors, installation is successful.
 
 #### Dependency Check
-
 ```bash
-# Using uv
 uv pip check
 uv pip list
-
-# Or using pip
-pip check
-pip list
 ```
-- Check for missing or conflicting packages.
+- `uv pip check` verifies there are no conflicting dependencies.
 
----
+### 5. Development (Optional)
+Recommended optional tools for development and testing (not in `pyproject.toml` by default):
+- `pytest`: For running unit tests (`src/tests`).
+- `jupyter`/`ipykernel`: For interactive notebooks.
 
-If you encounter installation issues, please provide the error message and your operating system version for assistance.
 
 ### Quick Start
 1. Install dependencies (recommended via uv)
@@ -237,11 +155,39 @@ Tracking diagnostics (when tracking enabled):
 - `results/tracking_overlay.png`
 
 ### Key Configuration
-Configuration is defined in `src/pipeline/pipeline.py`:
-- `SEGMENTATION_METHOD`: `"cellpose"` or `"threshold"`
-- `BUBBLE_METHOD`: `"rb_clahe"` (current default)
-- `BUBBLE_TH_THRESH`, `BUBBLE_TH_MIN_AREA`, `BUBBLE_TH_MIN_CIRCULARITY`
-- `BUBBLE_TH_QC_*`: QC-only parameters for `rb_clahe` overlays
+
+Configuration is managed via `config/pipeline_params.yaml`. You can modify this file to adjust segmentation, bubble detection, and output settings without changing the code.
+
+**Key Sections:**
+- **segmentation**: Parameters for `cellpose` or `threshold` methods.
+- **cellpose**: Model type (`cyto3`), diameter, and flow threshold.
+- **bubble**: Parameters for `rb_clahe` (rolling ball + CLAHE) detection.
+  - `thresh`, `min_area`, `min_circularity`: Main filters for bubbles.
+  - `rb_radius`, `clahe_clip`: Preprocessing settings.
+- **output**: Paths for results and QC images.
+
+**Example `config/pipeline_params.yaml` snippet:**
+```yaml
+segmentation:
+  method: cellpose
+  min_cell_area: 200
+
+cellpose:
+  model_type: cyto3
+  diameter: 100
+
+bubble:
+  method: rb_clahe
+  rb_clahe:
+    thresh: 0.28
+    min_area: 20
+```
+
+To run with default configuration:
+```bash
+uv run src/pipeline/pipeline.py
+```
+The script will automatically load `config/pipeline_params.yaml` if it exists.
 
 ### Test Utilities
 - `src/tests/bubble_frame_preproc_test.py`: single-frame bubble preprocessing comparison

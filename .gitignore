@@ -24,6 +24,11 @@ wheels/
 /data/
 /results/
 
+# Allow sample data
+!sample/*.csv
+!sample/*.npz
+!sample/*.png
+
 # OS
 .DS_Store
 Thumbs.db

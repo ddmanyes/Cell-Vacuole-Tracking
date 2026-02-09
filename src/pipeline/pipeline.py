@@ -37,76 +37,164 @@ try:
 except Exception:
     models = None
 
+import yaml
+import sys
+
 # ============================================================================
-# Configuration
+# Configuration (Loaded from YAML)
 # ============================================================================
 
-DEFAULT_INPUT = Path('data/bafA1/Group 1_wellA1_RI_MIP_stitched.tiff')
+# Default Configuration Dictionary
+CONFIG = {
+    'input': {'tiff_path': 'data/bafA1/Group 1_wellA1_RI_MIP_stitched.tiff'},
+    'output': {
+        'results_dir': 'results',
+        'qc_dir': 'results/qc',
+        'intermediate_dir': 'results/intermediates'
+    },
+    'segmentation': {
+        'method': 'cellpose',
+        'min_cell_area': 200,
+        'gaussian_sigma': 1.0,
+        'peak_footprint': 7,
+        'closing_disk': 5,
+        'label_expand_pixels': 3,
+        'target_coverage': 0.7,
+        'max_expand_iter': 25
+    },
+    'cellpose': {
+        'model_type': 'cyto3',
+        'diameter': 100,
+        'cellprob_threshold': 0.6,
+        'flow_threshold': 0.4,
+        'min_size': 0,
+        'use_clahe': True,
+        'bg_subtract': 'rolling_ball',
+        'rb_radius': 50,
+        'fill_holes_area': 0,
+        'closing_disk': 4
+    },
+    'bubble': {
+        'method': 'rb_clahe',
+        'min_sigma': 2,
+        'max_sigma': 15,
+        'threshold': 0.03,
+        'num_sigma': 3,
+        'tophat_radius': 2,
+        'smooth_sigma': 0.6,
+        'min_area': 3,
+        'max_area': 120,
+        'ws_smooth_sigma': 1.0,
+        'ws_intensity_threshold': 0.25,
+        'ws_marker_quantile': 0.25,
+        'cellpose_model_type': 'cyto3',
+        'cellpose_diameter': 10,
+        'cellpose_cellprob_threshold': 0.0,
+        'cellpose_flow_threshold': 0.4,
+        'cellpose_min_size': 0,
+        'cellpose_smooth_sigma': 1.0,
+        'th_thresh': 0.28,
+        'th_min_area': 20,
+        'th_max_area': None,
+        'th_min_circularity': 0.1,
+        'th_clahe_clip': 0.06,
+        'th_rb_radius': 50,
+        'th_qc_thresh': 0.28,
+        'th_qc_min_area': 20,
+        'th_qc_max_area': None,
+        'th_qc_min_circularity': 0.1,
+        'qc_min_sigma': 1,
+        'qc_max_sigma': 8,
+        'qc_threshold': 0.02
+    }
+}
 
-RESULTS_DIR = Path('results')
-QC_DIR = RESULTS_DIR / 'qc'
-INTERMEDIATE_DIR = RESULTS_DIR / 'intermediates'
+def load_config(config_path='config/pipeline_params.yaml'):
+    """Load configuration from YAML file and update defaults."""
+    path = Path(config_path)
+    if not path.exists():
+        print(f"Warning: Configuration file {config_path} not found. Using defaults.")
+        return
 
-# Segmentation config
-MIN_CELL_AREA = 200
-GAUSSIAN_SIGMA = 1.0
-PEAK_FOOTPRINT = 7
-CLOSING_DISK = 5
-LABEL_EXPAND_PIXELS = 3
-TARGET_COVERAGE = 0.7
-MAX_EXPAND_ITER = 25
+    try:
+        with open(path, 'r') as f:
+            yaml_config = yaml.safe_load(f)
+            if yaml_config:
+                update_recursive(CONFIG, yaml_config)
+        print(f"Configuration loaded from {config_path}")
+    except Exception as e:
+        print(f"Error loading configuration: {e}")
 
-SEGMENTATION_METHOD = "cellpose"
+def update_recursive(d, u):
+    """Recursively update dictionary d with values from u."""
+    for k, v in u.items():
+        if isinstance(v, dict):
+            d[k] = update_recursive(d.get(k, {}), v)
+        else:
+            d[k] = v
+    return d
 
-CELLPOSE_MODEL_TYPE = "cyto3"
-CELLPOSE_DIAMETER = 100
-CELLPOSE_CELLPROB_THRESHOLD = 0.6
-CELLPOSE_FLOW_THRESHOLD = 0.4
-CELLPOSE_MIN_SIZE = 0
-CELLPOSE_USE_CLAHE = True
-CELLPOSE_BG_SUBTRACT = "rolling_ball"
-CELLPOSE_RB_RADIUS = 50
-CELLPOSE_FILL_HOLES_AREA = 0
-CELLPOSE_CLOSING_DISK = 4
+# Load config initially
+load_config()
 
-# Bubble detection config
-BUBBLE_METHOD = "rb_clahe"
-BUBBLE_MIN_SIGMA = 2
-BUBBLE_MAX_SIGMA = 15
-BUBBLE_THRESHOLD = 0.03
-BUBBLE_NUM_SIGMA = 3  # Reduced from 10 for speed
+# Map Config to Global Variables for compatibility
+DEFAULT_INPUT = Path(CONFIG['input']['tiff_path'])
+RESULTS_DIR = Path(CONFIG['output']['results_dir'])
+QC_DIR = Path(CONFIG['output']['qc_dir'])
+INTERMEDIATE_DIR = Path(CONFIG['output'].get('intermediate_dir', 'results/intermediates'))
 
-BUBBLE_TOPHAT_RADIUS = 2
-BUBBLE_SMOOTH_SIGMA = 0.6
-BUBBLE_MIN_AREA = 3
-BUBBLE_MAX_AREA = 120
+MIN_CELL_AREA = CONFIG['segmentation']['min_cell_area']
+GAUSSIAN_SIGMA = CONFIG['segmentation']['gaussian_sigma']
+PEAK_FOOTPRINT = CONFIG['segmentation']['peak_footprint']
+CLOSING_DISK = CONFIG['segmentation']['closing_disk']
+LABEL_EXPAND_PIXELS = CONFIG['segmentation']['label_expand_pixels']
+TARGET_COVERAGE = CONFIG['segmentation']['target_coverage']
+MAX_EXPAND_ITER = CONFIG['segmentation']['max_expand_iter']
+SEGMENTATION_METHOD = CONFIG['segmentation']['method']
 
-BUBBLE_WS_SMOOTH_SIGMA = 1.0
-BUBBLE_WS_INTENSITY_THRESHOLD = 0.25
-BUBBLE_WS_MARKER_QUANTILE = 0.25
-BUBBLE_CELLPOSE_MODEL_TYPE = "cyto3"
-BUBBLE_CELLPOSE_DIAMETER = 10
-BUBBLE_CELLPOSE_CELLPROB_THRESHOLD = 0.0
-BUBBLE_CELLPOSE_FLOW_THRESHOLD = 0.4
-BUBBLE_CELLPOSE_MIN_SIZE = 0
-BUBBLE_CELLPOSE_SMOOTH_SIGMA = 1.0
+CELLPOSE_MODEL_TYPE = CONFIG['cellpose']['model_type']
+CELLPOSE_DIAMETER = CONFIG['cellpose']['diameter']
+CELLPOSE_CELLPROB_THRESHOLD = CONFIG['cellpose']['cellprob_threshold']
+CELLPOSE_FLOW_THRESHOLD = CONFIG['cellpose']['flow_threshold']
+CELLPOSE_MIN_SIZE = CONFIG['cellpose']['min_size']
+CELLPOSE_USE_CLAHE = CONFIG['cellpose']['use_clahe']
+CELLPOSE_BG_SUBTRACT = CONFIG['cellpose']['bg_subtract']
+CELLPOSE_RB_RADIUS = CONFIG['cellpose']['rb_radius']
+CELLPOSE_FILL_HOLES_AREA = CONFIG['cellpose']['fill_holes_area']
+CELLPOSE_CLOSING_DISK = CONFIG['cellpose']['closing_disk']
 
-BUBBLE_TH_THRESH = 0.28
-BUBBLE_TH_MIN_AREA = 20
-BUBBLE_TH_MAX_AREA = None
-BUBBLE_TH_MIN_CIRCULARITY = 0.1
-BUBBLE_TH_CLAHE_CLIP = 0.06
-BUBBLE_TH_RB_RADIUS = 50
+BUBBLE_METHOD = CONFIG['bubble']['method']
+BUBBLE_MIN_SIGMA = CONFIG['bubble']['min_sigma']
+BUBBLE_MAX_SIGMA = CONFIG['bubble']['max_sigma']
+BUBBLE_THRESHOLD = CONFIG['bubble']['threshold']
+BUBBLE_NUM_SIGMA = CONFIG['bubble']['num_sigma']
+BUBBLE_TOPHAT_RADIUS = CONFIG['bubble']['tophat_radius']
+BUBBLE_SMOOTH_SIGMA = CONFIG['bubble']['smooth_sigma']
+BUBBLE_MIN_AREA = CONFIG['bubble']['min_area']
+BUBBLE_MAX_AREA = CONFIG['bubble']['max_area']
+BUBBLE_WS_SMOOTH_SIGMA = CONFIG['bubble']['ws_smooth_sigma']
+BUBBLE_WS_INTENSITY_THRESHOLD = CONFIG['bubble']['ws_intensity_threshold']
+BUBBLE_WS_MARKER_QUANTILE = CONFIG['bubble']['ws_marker_quantile']
+BUBBLE_CELLPOSE_MODEL_TYPE = CONFIG['bubble']['cellpose_model_type']
+BUBBLE_CELLPOSE_DIAMETER = CONFIG['bubble']['cellpose_diameter']
+BUBBLE_CELLPOSE_CELLPROB_THRESHOLD = CONFIG['bubble']['cellpose_cellprob_threshold']
+BUBBLE_CELLPOSE_FLOW_THRESHOLD = CONFIG['bubble']['cellpose_flow_threshold']
+BUBBLE_CELLPOSE_MIN_SIZE = CONFIG['bubble']['cellpose_min_size']
+BUBBLE_CELLPOSE_SMOOTH_SIGMA = CONFIG['bubble']['cellpose_smooth_sigma']
+BUBBLE_TH_THRESH = CONFIG['bubble']['th_thresh']
+BUBBLE_TH_MIN_AREA = CONFIG['bubble']['th_min_area']
+BUBBLE_TH_MAX_AREA = CONFIG['bubble']['th_max_area']
+BUBBLE_TH_MIN_CIRCULARITY = CONFIG['bubble']['th_min_circularity']
+BUBBLE_TH_CLAHE_CLIP = CONFIG['bubble']['th_clahe_clip']
+BUBBLE_TH_RB_RADIUS = CONFIG['bubble']['th_rb_radius']
+BUBBLE_TH_QC_THRESH = CONFIG['bubble']['th_qc_thresh']
+BUBBLE_TH_QC_MIN_AREA = CONFIG['bubble']['th_qc_min_area']
+BUBBLE_TH_QC_MAX_AREA = CONFIG['bubble']['th_qc_max_area']
+BUBBLE_TH_QC_MIN_CIRCULARITY = CONFIG['bubble']['th_qc_min_circularity']
+BUBBLE_QC_MIN_SIGMA = CONFIG['bubble']['qc_min_sigma']
+BUBBLE_QC_MAX_SIGMA = CONFIG['bubble']['qc_max_sigma']
+BUBBLE_QC_THRESHOLD = CONFIG['bubble']['qc_threshold']
 
-BUBBLE_TH_QC_THRESH = 0.28
-BUBBLE_TH_QC_MIN_AREA = 20
-BUBBLE_TH_QC_MAX_AREA = None
-BUBBLE_TH_QC_MIN_CIRCULARITY = 0.1
-
-# Bubble QC overlay config (can be different from analysis)
-BUBBLE_QC_MIN_SIGMA = 1
-BUBBLE_QC_MAX_SIGMA = 8
-BUBBLE_QC_THRESHOLD = 0.02
 
 # ============================================================================
 # Setup
@@ -115,7 +203,8 @@ BUBBLE_QC_THRESHOLD = 0.02
 def setup_dirs():
     """Create output directories."""
     RESULTS_DIR.mkdir(exist_ok=True)
-    QC_DIR.mkdir(exist_ok=True)
+    QC_DIR.mkdir(parents=True, exist_ok=True)
+    INTERMEDIATE_DIR.mkdir(parents=True, exist_ok=True)
 
 # ============================================================================
 # TIFF Loading
