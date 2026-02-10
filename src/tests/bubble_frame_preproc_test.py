@@ -24,23 +24,43 @@ from skimage.morphology import dilation
 from skimage.measure import regionprops
 from scipy import ndimage
 
+import yaml
+import sys
+
+# Load config if available
+CONFIG_PATH = Path("config/pipeline_params.yaml")
+CONFIG = {}
+if CONFIG_PATH.exists():
+    try:
+        with open(CONFIG_PATH, "r") as f:
+            CONFIG = yaml.safe_load(f) or {}
+    except Exception as e:
+        print(f"Warning: Could not load config: {e}")
+
 DEFAULT_INPUT = Path("data/bafA1/Group 1_wellA1_RI_MIP_stitched.tiff")
+if CONFIG.get("input", {}).get("tiff_path"):
+    DEFAULT_INPUT = Path(CONFIG["input"]["tiff_path"])
+
 DEFAULT_OUTDIR = Path("results/bubble_preproc_frame")
 
-CELLPOSE_MODEL_TYPE = "cyto3"
-CELLPOSE_DIAMETER = 100
-CELLPOSE_CELLPROB_THRESHOLD = 0.6
-CELLPOSE_FLOW_THRESHOLD = 0.4
-CELLPOSE_MIN_SIZE = 0
-CELLPOSE_RB_RADIUS = 50
-CELLPOSE_USE_CLAHE = True
+# Cellpose defaults (override with config if present)
+cp_conf = CONFIG.get("cellpose", {})
+CELLPOSE_MODEL_TYPE = cp_conf.get("model_type", "cyto3")
+CELLPOSE_DIAMETER = cp_conf.get("diameter", 100)
+CELLPOSE_CELLPROB_THRESHOLD = cp_conf.get("cellprob_threshold", 0.6)
+CELLPOSE_FLOW_THRESHOLD = cp_conf.get("flow_threshold", 0.4)
+CELLPOSE_MIN_SIZE = cp_conf.get("min_size", 0)
+CELLPOSE_RB_RADIUS = cp_conf.get("rb_radius", 50)
+CELLPOSE_USE_CLAHE = cp_conf.get("use_clahe", True)
 
-BUBBLE_TH_THRESH = 0.28
-BUBBLE_TH_MIN_AREA = 20
-BUBBLE_TH_MAX_AREA = None
-BUBBLE_TH_MIN_CIRCULARITY = 0.1
+# Bubble defaults (override with config if present)
+bubble_conf = CONFIG.get("bubble", {}).get("rb_clahe", {})
+BUBBLE_TH_THRESH = bubble_conf.get("thresh", 0.28)
+BUBBLE_TH_MIN_AREA = bubble_conf.get("min_area", 20)
+BUBBLE_TH_MAX_AREA = bubble_conf.get("max_area", None)
+BUBBLE_TH_MIN_CIRCULARITY = bubble_conf.get("min_circularity", 0.1)
+PREPROC_CLAHE_CLIP = bubble_conf.get("clahe_clip", 0.06)
 
-PREPROC_CLAHE_CLIP = 0.06
 PREPROC_DOG_SIGMA1 = 1.0
 PREPROC_DOG_SIGMA2 = 3.0
 
@@ -257,7 +277,7 @@ def write_stats_csv(out_path: Path, stats: list[dict]) -> None:
         writer.writerows(stats)
 
 
-def main(input_path: Path, frame_index: int, output_dir: Path, bubble_thresh: float | None) -> None:
+def main(input_path: Path, frame_index: int, output_dir: Path, bubble_thresh: float | None, clahe_clip: float | None = None) -> None:
     output_dir.mkdir(parents=True, exist_ok=True)
 
     with tiff.TiffFile(input_path) as tf:
@@ -272,6 +292,10 @@ def main(input_path: Path, frame_index: int, output_dir: Path, bubble_thresh: fl
     if bubble_thresh is not None:
         global BUBBLE_TH_THRESH
         BUBBLE_TH_THRESH = bubble_thresh
+
+    if clahe_clip is not None:
+        global PREPROC_CLAHE_CLIP
+        PREPROC_CLAHE_CLIP = clahe_clip
 
     pre_rb_clahe = preprocess_rb_clahe(frame)
     bubbles_rb_clahe = detect_bubbles_threshold(pre_rb_clahe, cell_mask)
@@ -317,6 +341,7 @@ if __name__ == "__main__":
     parser.add_argument("--frame", type=int, default=0)
     parser.add_argument("--output-dir", type=str, default=str(DEFAULT_OUTDIR))
     parser.add_argument("--bubble-thresh", type=float, default=None)
+    parser.add_argument("--clahe-clip", type=float, default=None, help="Override CLAHE clip limit (default: 0.06)")
     args = parser.parse_args()
 
-    main(Path(args.input), args.frame, Path(args.output_dir), args.bubble_thresh)
+    main(Path(args.input), args.frame, Path(args.output_dir), args.bubble_thresh, args.clahe_clip)

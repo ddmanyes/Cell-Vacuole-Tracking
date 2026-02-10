@@ -21,19 +21,57 @@ from skimage.segmentation import find_boundaries
 from skimage.measure import regionprops
 from scipy import ndimage
 
+import yaml
+import sys
+
+# Load config if available
+CONFIG_PATH = Path("config/pipeline_params.yaml")
+CONFIG = {}
+if CONFIG_PATH.exists():
+    try:
+        with open(CONFIG_PATH, "r") as f:
+            CONFIG = yaml.safe_load(f) or {}
+    except Exception as e:
+        print(f"Warning: Could not load config: {e}")
+
 DEFAULT_INPUT = Path("data/bafA1/Group 1_wellA1_RI_MIP_stitched.tiff")
+if CONFIG.get("input", {}).get("tiff_path"):
+    DEFAULT_INPUT = Path(CONFIG["input"]["tiff_path"])
+
 DEFAULT_OUTDIR = Path("results/bubble_single_cell")
 
-CELLPOSE_MODEL_TYPE = "cyto3"
-CELLPOSE_DIAMETER = 100
-CELLPOSE_CELLPROB_THRESHOLD = 0.6
-CELLPOSE_FLOW_THRESHOLD = 0.4
-CELLPOSE_MIN_SIZE = 0
-CELLPOSE_RB_RADIUS = 50
-CELLPOSE_USE_CLAHE = True
-CELLPOSE_FILL_HOLES_AREA = 0
-CELLPOSE_CLOSING_DISK = 4
+# Cellpose defaults (override with config if present)
+cp_conf = CONFIG.get("cellpose", {})
+CELLPOSE_MODEL_TYPE = cp_conf.get("model_type", "cyto3")
+CELLPOSE_DIAMETER = cp_conf.get("diameter", 100)
+CELLPOSE_CELLPROB_THRESHOLD = cp_conf.get("cellprob_threshold", 0.6)
+CELLPOSE_FLOW_THRESHOLD = cp_conf.get("flow_threshold", 0.4)
+CELLPOSE_MIN_SIZE = cp_conf.get("min_size", 0)
+CELLPOSE_RB_RADIUS = cp_conf.get("rb_radius", 50)
+CELLPOSE_USE_CLAHE = cp_conf.get("use_clahe", True)
+CELLPOSE_FILL_HOLES_AREA = cp_conf.get("fill_holes_area", 0)
+CELLPOSE_CLOSING_DISK = cp_conf.get("closing_disk", 4)
 
+# Bubble defaults (override with config if present)
+bubble_conf = CONFIG.get("bubble", {}).get("rb_clahe", {})
+BUBBLE_TH_THRESH_SWEEP = [bubble_conf.get("thresh", 0.28)]  # Default to config value
+if not bubble_conf: # Fallback sweep range if config missing
+    BUBBLE_TH_THRESH_SWEEP = [0.15, 0.2, 0.25]
+
+# If config exists, center sweep around the config value
+conf_thresh = bubble_conf.get("thresh", 0.28)
+BUBBLE_TH_THRESH_SWEEP = [max(0.01, conf_thresh - 0.05), conf_thresh, min(1.0, conf_thresh + 0.05)]
+
+BUBBLE_TH_MIN_AREA = bubble_conf.get("min_area", 20)
+BUBBLE_TH_MAX_AREA = bubble_conf.get("max_area", 400)
+if BUBBLE_TH_MAX_AREA is None: BUBBLE_TH_MAX_AREA = 10000
+
+BUBBLE_TH_MIN_CIRCULARITY = bubble_conf.get("min_circularity", 0.1)
+PREPROC_CLAHE_CLIP = bubble_conf.get("clahe_clip", 0.06)
+
+PREPROC_RB_RADIUS = bubble_conf.get("rb_radius", 50)
+
+# Other constants remain defaults for now
 BUBBLE_CELLPOSE_MODEL_TYPE = "cyto3"
 BUBBLE_CELLPOSE_DIAMETER = 10
 BUBBLE_CELLPOSE_CELLPROB_THRESHOLD = 0.0
@@ -48,9 +86,6 @@ BUBBLE_CELLPOSE_CLAHE_CLIP_SWEEP = [0.02, 0.06]
 BUBBLE_CELLPOSE_SMOOTH_SIGMA_SWEEP = [1.0, 1.5, 2.0]
 
 BUBBLE_TH_SMOOTH_SIGMA = 1.0
-BUBBLE_TH_THRESH_SWEEP = [0.15, 0.2, 0.25]
-BUBBLE_TH_MIN_AREA = 20
-BUBBLE_TH_MAX_AREA = 400
 BUBBLE_TH_CIRC_SWEEP = [0.5, 0.6, 0.7]
 
 BUBBLE_HOUGH_BLUR = 3
@@ -62,8 +97,6 @@ BUBBLE_HOUGH_PARAM2_SWEEP = [8, 12, 16]
 PREPROC_BLACKHAT_RADIUS = 5
 PREPROC_DOG_SIGMA1 = 1.0
 PREPROC_DOG_SIGMA2 = 3.0
-PREPROC_RB_RADIUS = 50
-PREPROC_CLAHE_CLIP = 0.06
 PREPROC_DOG_CLAHE_THRESHOLD_SWEEP = [0.15, 0.2, 0.25]
 PREPROC_DOG_CLAHE_CIRC_SWEEP = [0.5, 0.6, 0.7]
 

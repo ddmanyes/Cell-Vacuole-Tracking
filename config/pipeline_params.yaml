@@ -53,17 +53,18 @@ bubble:
     min_size: 0
     smooth_sigma: 1.0
   rb_clahe:
+    # 泡泡偵測門檻 (0-1): 越低越嚴格 (只抓很黑的)，越高越鬆 (抓比較淡的)
     thresh: 0.28
-    min_area: 20
+    # 最小泡泡面積 (pixels): 過濾掉太小的雜訊點
+    min_area: 10
+    # 最大泡泡面積 (pixels): 過濾掉太大的誤判 (null 表示不限制)
     max_area: null
+    # 最小圓度 (0-1): 1.0 為正圓。數值越低允許形狀越不規則
     min_circularity: 0.1
-    clahe_clip: 0.06
+    # CLAHE 對比強化參數: 越高對比越強，但也可能放大雜訊
+    clahe_clip: 0.5
+    # 滾動球半徑: 用於背景扣除，通常設為細胞直徑的一半左右
     rb_radius: 50
-  rb_clahe_qc:
-    thresh: 0.28
-    min_area: 20
-    max_area: null
-    min_circularity: 0.1
 
 bubble_qc_overlay:
   min_sigma: 1
@@ -84,3 +85,10 @@ runtime:
 intermediate:
   save: false
   dir: results/intermediates
+
+bubble_sweep:
+  # 參數掃描範圍設定
+  thresh: [0.25]
+  min_area: [5, 10, 15, 20]
+  clahe_clip: [0.30, 0.35, 0.40, 0.45]
+

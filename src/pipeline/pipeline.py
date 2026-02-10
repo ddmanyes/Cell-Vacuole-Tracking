@@ -99,10 +99,6 @@ CONFIG = {
         'th_min_circularity': 0.1,
         'th_clahe_clip': 0.06,
         'th_rb_radius': 50,
-        'th_qc_thresh': 0.28,
-        'th_qc_min_area': 20,
-        'th_qc_max_area': None,
-        'th_qc_min_circularity': 0.1,
         'qc_min_sigma': 1,
         'qc_max_sigma': 8,
         'qc_threshold': 0.02
@@ -187,10 +183,7 @@ BUBBLE_TH_MAX_AREA = CONFIG['bubble']['th_max_area']
 BUBBLE_TH_MIN_CIRCULARITY = CONFIG['bubble']['th_min_circularity']
 BUBBLE_TH_CLAHE_CLIP = CONFIG['bubble']['th_clahe_clip']
 BUBBLE_TH_RB_RADIUS = CONFIG['bubble']['th_rb_radius']
-BUBBLE_TH_QC_THRESH = CONFIG['bubble']['th_qc_thresh']
-BUBBLE_TH_QC_MIN_AREA = CONFIG['bubble']['th_qc_min_area']
-BUBBLE_TH_QC_MAX_AREA = CONFIG['bubble']['th_qc_max_area']
-BUBBLE_TH_QC_MIN_CIRCULARITY = CONFIG['bubble']['th_qc_min_circularity']
+BUBBLE_TH_RB_RADIUS = CONFIG['bubble']['th_rb_radius']
 BUBBLE_QC_MIN_SIGMA = CONFIG['bubble']['qc_min_sigma']
 BUBBLE_QC_MAX_SIGMA = CONFIG['bubble']['qc_max_sigma']
 BUBBLE_QC_THRESHOLD = CONFIG['bubble']['qc_threshold']
@@ -778,16 +771,10 @@ def detect_bubbles_gradient_ws(frame_mask, frame_img, *, use_qc_params=False):
 def detect_bubbles_rb_clahe(frame_mask, frame_img, *, use_qc_params=False):
     pre = preprocess_rb_clahe(frame_img)
 
-    if use_qc_params:
-        thresh = BUBBLE_TH_QC_THRESH
-        min_area = BUBBLE_TH_QC_MIN_AREA
-        max_area = BUBBLE_TH_QC_MAX_AREA
-        min_circularity = BUBBLE_TH_QC_MIN_CIRCULARITY
-    else:
-        thresh = BUBBLE_TH_THRESH
-        min_area = BUBBLE_TH_MIN_AREA
-        max_area = BUBBLE_TH_MAX_AREA
-        min_circularity = BUBBLE_TH_MIN_CIRCULARITY
+    thresh = BUBBLE_TH_THRESH
+    min_area = BUBBLE_TH_MIN_AREA
+    max_area = BUBBLE_TH_MAX_AREA
+    min_circularity = BUBBLE_TH_MIN_CIRCULARITY
 
     filtered = np.zeros_like(frame_mask, dtype=np.int32)
     next_label = 1
