@@ -92,3 +92,172 @@ bubble_sweep:
   min_area: [5, 10, 15, 20]
   clahe_clip: [0.30, 0.35, 0.40, 0.45]
 
+# ============================================================================
+# 細胞分割參數掃描配置 (Segmentation Parameter Sweep)
+# ============================================================================
+# 用於 src/tests/param_sweep.py 的參數掃描測試
+# 目的：找出最適合您數據的細胞分割參數組合
+
+segmentation_sweep:
+  # --------------------------------------------------------------------------
+  # 基準參數 (Baseline Parameters)
+  # --------------------------------------------------------------------------
+  # 所有變體的預設參數值，未在變體中指定的參數將使用這些值
+  baseline:
+    # 影像平滑參數
+    gaussian_sigma: 1.0          # 高斯平滑的標準差
+                                 # 影響：越大邊界越平滑，但可能遺失細節
+                                 # 建議：0.5-2.0
+    
+    # 形態學清理參數
+    min_cell_area: 200           # 最小細胞面積 (像素)
+                                 # 影響：過濾掉小於此面積的雜訊物件
+                                 # 建議：根據最小細胞大小調整 (50-500)
+    
+    closing_disk: 3              # 形態學閉合操作的結構元素半徑
+                                 # 影響：連接細小的斷裂邊界，數值越大連接越強
+                                 # 建議：2-7
+    
+    remove_holes_area: 150       # 自動填補的孔洞面積閾值 (像素)
+                                 # 影響：填補細胞內小於此面積的孔洞
+                                 # 建議：50-300
+    
+    # 分水嶺分割參數
+    peak_min_distance: 7         # 細胞中心 (標記點) 的最小間距 (像素)
+                                 # 影響：控制細胞分割粒度
+                                 #   - 數值過小：過度分割 (一個細胞被切成多個)
+                                 #   - 數值過大：欠分割 (多個細胞合併成一個)
+                                 # 建議：細胞直徑的 1/10 到 1/5 (5-20)
+    
+    # 背景扣除參數
+    bg_sigma: 25                 # 高斯背景扣除的標準差
+                                 # 影響：控制背景估計的平滑程度
+                                 # 建議：20-50
+    
+    rb_radius: 50                # 滾動球背景扣除的半徑 (像素)
+                                 # 影響：應設為細胞直徑的一半左右
+                                 # 建議：細胞直徑 / 2
+    
+    # 自適應閾值參數
+    local_block_size: 51         # 局部閾值的區塊大小 (必須是奇數)
+                                 # 影響：控制局部區域的大小
+                                 # 建議：31-101 (根據細胞大小)
+    
+    local_offset: -0.01          # 局部閾值的偏移量
+                                 # 影響：數值越小偵測越靈敏 (偵測更暗的區域)
+                                 # 建議：-0.05 到 0.0
+
+  # --------------------------------------------------------------------------
+  # 參數掃描變體 (Parameter Sweep Variants)
+  # --------------------------------------------------------------------------
+  # 每個變體測試不同的參數組合，未指定的參數使用 baseline 的值
+  
+  variants:
+    # 1. 基準變體 (無任何預處理)
+    - name: base_otsu
+      description: "純 Otsu 閾值，無背景扣除或對比增強"
+      params: {}
+
+    # 2-6. 預處理測試
+    - name: clahe_only
+      description: "僅使用 CLAHE 對比增強"
+      params:
+        use_clahe: true           # 啟用自適應直方圖均衡化
+                                  # 適用：局部對比度低的影像
+
+    - name: bg_gaussian_only
+      description: "僅使用高斯背景扣除"
+      params:
+        bg_subtract: gaussian     # 選項：null, "gaussian", "rolling_ball"
+        bg_sigma: 25              # 影響平滑強度
+
+    - name: bg_rolling_ball_only
+      description: "僅使用滾動球背景扣除"
+      params:
+        bg_subtract: rolling_ball
+        rb_radius: 50             # 應設為細胞直徑的一半
+
+    - name: clahe_bg_gaussian
+      description: "CLAHE + 高斯背景扣除組合"
+      params:
+        use_clahe: true
+        bg_subtract: gaussian
+        bg_sigma: 25
+
+    - name: clahe_bg_rolling_ball
+      description: "CLAHE + 滾動球背景扣除組合 (推薦)"
+      params:
+        use_clahe: true
+        bg_subtract: rolling_ball
+        rb_radius: 50
+
+    # 7-8. 標記點控制測試
+    - name: marker_min_distance_14
+      description: "增加細胞中心最小間距 (減少過度分割)"
+      params:
+        peak_min_distance: 14     # 適用：細胞被過度分割的情況
+
+    - name: marker_threshold_abs_0p15
+      description: "設置絕對強度閾值 (只取明顯的細胞中心)"
+      params:
+        peak_threshold_abs: 0.15  # 影響：只偵測距離變換值 > 0.15 的峰值
+                                  # 適用：減少弱邊界細胞的過度分割
+
+    # 9. 強化形態學操作
+    - name: morph_closing7_holes300
+      description: "更強的閉合操作和孔洞填補"
+      params:
+        closing_disk: 7           # 連接更寬的斷裂
+        remove_holes_area: 300    # 填補更大的孔洞
+
+    # 10. 自適應閾值測試
+    - name: adaptive_threshold
+      description: "使用局部自適應閾值 (適合不均勻光照)"
+      params:
+        use_local_thresh: true    # 啟用局部閾值
+        local_block_size: 51      # 局部區域大小
+        local_offset: -0.02       # 偏移量 (越負越靈敏)
+
+    # 11. Sobel 梯度分水嶺
+    - name: sobel_watershed
+      description: "使用梯度場進行分水嶺 (適合邊界模糊的細胞)"
+      params:
+        use_sobel_ws: true        # 使用 Sobel 梯度而非距離變換
+        peak_min_distance: 10     # 搭配較小的間距
+
+# ============================================================================
+# 參數調整指南
+# ============================================================================
+# 
+# 常見問題與解決方案：
+# 
+# 1. 細胞被過度分割（一個細胞切成多個）
+#    → 增加 peak_min_distance (例如：7 → 14)
+#    → 或使用 marker_threshold_abs 過濾弱峰值
+# 
+# 2. 多個細胞被合併成一個
+#    → 減少 peak_min_distance (例如：7 → 5)
+#    → 增加 closing_disk (強化邊界)
+# 
+# 3. 背景雜訊太多
+#    → 增加 min_cell_area (過濾小物件)
+#    → 啟用背景扣除 (bg_subtract)
+# 
+# 4. 細胞邊界不完整
+#    → 增加 closing_disk (連接斷裂)
+#    → 增加 remove_holes_area (填補孔洞)
+# 
+# 5. 光照不均勻
+#    → 使用 adaptive_threshold 變體
+#    → 或啟用背景扣除
+# 
+# 6. 細胞邊界模糊
+#    → 使用 sobel_watershed 變體
+#    → 或啟用 CLAHE 增強對比度
+# 
+# 使用流程：
+# 1. 執行 param_sweep.py 生成所有變體的結果
+# 2. 檢視 variant_metrics.csv 中的 label_count (細胞數量)
+# 3. 視覺化檢查對應的 PNG 檔案驗證分割品質
+# 4. 選擇最佳變體的參數更新到 cellpose / segmentation 區段
+

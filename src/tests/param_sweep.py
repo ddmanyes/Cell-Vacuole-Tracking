@@ -1,12 +1,61 @@
 """
 Segmentation parameter sweep for visual QC and metrics.
 
-Runs multiple variants on a single frame and saves:
-- QC overlay PNGs (original + boundaries, colored mask)
-- CSV metrics for quick comparison
+This script automates the testing of multiple cell segmentation parameter combinations
+on a single frame, generating both visual overlays and quantitative metrics for comparison.
+
+Features:
+- Automatically loads parameter variants from config/pipeline_params.yaml
+- Tests systematic sweeps across preprocessing, thresholding, and watershed parameters
+- Generates QC overlays for visual inspection (boundaries + colored masks)
+- Exports CSV metrics for quantitative comparison
+
+Configuration:
+Parameter variants are defined in config/pipeline_params.yaml under 'segmentation_sweep':
+    segmentation_sweep:
+      baseline:
+        gaussian_sigma: 1.0
+        min_cell_area: 200
+        peak_min_distance: 7
+        # ... other default parameters
+      variants:
+        - name: clahe_only
+          description: "僅使用 CLAHE 對比增強"
+          params:
+            use_clahe: true
+        - name: bg_rolling_ball_only
+          params:
+            bg_subtract: rolling_ball
+        # ... more variants
 
 Usage:
+    # Run sweep on frame 1 (default)
     uv run src/tests/param_sweep.py --input <tiff_path> --frame 1
+    
+    # Custom output directory
+    uv run src/tests/param_sweep.py --output-dir results/custom_variants
+    
+    # Test different frames to verify consistency
+    uv run src/tests/param_sweep.py --frame 0
+    uv run src/tests/param_sweep.py --frame 5
+
+Output Files:
+- results/variants/variant_<name>.png: QC overlays (boundaries + colored mask)
+- results/variants/variant_metrics.csv: Quantitative metrics for all variants
+
+Workflow:
+1. Configure parameter variants in config/pipeline_params.yaml
+2. Run the sweep on a representative frame
+3. Review variant_metrics.csv (focus on label_count and coverage)
+4. Visually inspect corresponding PNG overlays
+5. Update config/pipeline_params.yaml with chosen optimal parameters
+6. Run full pipeline with optimized settings
+
+Tips:
+- Check label_count against expected cell count
+- Coverage 0.3-0.7 is typically reasonable
+- High inside_outside_contrast indicates good cell/background separation
+- Compare multiple frames to ensure parameter robustness
 """
 
 from pathlib import Path
@@ -30,8 +79,22 @@ from skimage.segmentation import watershed, find_boundaries
 from skimage.restoration import rolling_ball
 from scipy import ndimage
 
+import yaml
+
+# Load config if available
+CONFIG_PATH = Path("config/pipeline_params.yaml")
+CONFIG = {}
+if CONFIG_PATH.exists():
+    try:
+        with open(CONFIG_PATH, "r") as f:
+            CONFIG = yaml.safe_load(f) or {}
+    except Exception as e:
+        print(f"Warning: Could not load config: {e}")
 
 DEFAULT_INPUT = Path("data/bafA1/Group 1_wellA1_RI_MIP_stitched.tiff")
+if CONFIG.get("input", {}).get("tiff_path"):
+    DEFAULT_INPUT = Path(CONFIG["input"]["tiff_path"])
+
 DEFAULT_OUTDIR = Path("results/variants")
 
 
@@ -200,66 +263,88 @@ def main(input_path, frame_index, output_dir):
     frame_index = max(0, min(frame_index, imgs.shape[0] - 1))
     frame = imgs[frame_index]
 
-    variants = []
+    # Load variants from config or use hardcoded defaults
+    sweep_conf = CONFIG.get("segmentation_sweep", {})
+    baseline_params = sweep_conf.get("baseline", {})
+    config_variants = sweep_conf.get("variants", [])
+    
+    if config_variants:
+        # Use variants from config file
+        print(f"Loading {len(config_variants)} variants from config/pipeline_params.yaml")
+        variants = []
+        for var in config_variants:
+            # Merge baseline params with variant-specific params
+            merged_params = {**baseline_params, **var.get("params", {})}
+            variants.append({
+                "name": var["name"],
+                "params": merged_params
+            })
+    else:
+        # Fallback to hardcoded defaults for backward compatibility
+        print("No config found, using hardcoded default variants")
+        variants = []
 
-    # Baseline for comparison
-    variants.append({"name": "base_otsu", "params": dict()})
+        # Baseline for comparison
+        variants.append({"name": "base_otsu", "params": dict()})
 
-    # 1) Pre-processing
-    variants.append({
-        "name": "clahe_only",
-        "params": dict(use_clahe=True),
-    })
-    variants.append({
-        "name": "bg_gaussian_only",
-        "params": dict(bg_subtract="gaussian", bg_sigma=25),
-    })
-    variants.append({
-        "name": "bg_rolling_ball_only",
-        "params": dict(bg_subtract="rolling_ball", rb_radius=50),
-    })
-    variants.append({
-        "name": "clahe_bg_gaussian",
-        "params": dict(use_clahe=True, bg_subtract="gaussian", bg_sigma=25),
-    })
-    variants.append({
-        "name": "clahe_bg_rolling_ball",
-        "params": dict(use_clahe=True, bg_subtract="rolling_ball", rb_radius=50),
-    })
+        # 1) Pre-processing
+        variants.append({
+            "name": "clahe_only",
+            "params": dict(use_clahe=True),
+        })
+        variants.append({
+            "name": "bg_gaussian_only",
+            "params": dict(bg_subtract="gaussian", bg_sigma=25),
+        })
+        variants.append({
+            "name": "bg_rolling_ball_only",
+            "params": dict(bg_subtract="rolling_ball", rb_radius=50),
+        })
+        variants.append({
+            "name": "clahe_bg_gaussian",
+            "params": dict(use_clahe=True, bg_subtract="gaussian", bg_sigma=25),
+        })
+        variants.append({
+            "name": "clahe_bg_rolling_ball",
+            "params": dict(use_clahe=True, bg_subtract="rolling_ball", rb_radius=50),
+        })
 
-    # 2) Marker control
-    variants.append({
-        "name": "marker_min_distance_14",
-        "params": dict(peak_min_distance=14),
-    })
-    variants.append({
-        "name": "marker_threshold_abs_0p15",
-        "params": dict(peak_threshold_abs=0.15),
-    })
+        # 2) Marker control
+        variants.append({
+            "name": "marker_min_distance_14",
+            "params": dict(peak_min_distance=14),
+        })
+        variants.append({
+            "name": "marker_threshold_abs_0p15",
+            "params": dict(peak_threshold_abs=0.15),
+        })
 
-    # 3) Morphology
-    variants.append({
-        "name": "morph_closing7_holes300",
-        "params": dict(closing_disk=7, remove_holes_area=300),
-    })
+        # 3) Morphology
+        variants.append({
+            "name": "morph_closing7_holes300",
+            "params": dict(closing_disk=7, remove_holes_area=300),
+        })
 
-    # 4) Adaptive threshold
-    variants.append({
-        "name": "adaptive_threshold",
-        "params": dict(use_local_thresh=True, local_block_size=51, local_offset=-0.02),
-    })
+        # 4) Adaptive threshold
+        variants.append({
+            "name": "adaptive_threshold",
+            "params": dict(use_local_thresh=True, local_block_size=51, local_offset=-0.02),
+        })
 
-    # 5) Smooth + Sobel + Watershed
-    variants.append({
-        "name": "sobel_watershed",
-        "params": dict(use_sobel_ws=True, peak_min_distance=10),
-    })
+        # 5) Smooth + Sobel + Watershed
+        variants.append({
+            "name": "sobel_watershed",
+            "params": dict(use_sobel_ws=True, peak_min_distance=10),
+        })
 
     metrics_rows = []
 
-    for variant in variants:
+    print(f"Processing frame {frame_index}...")
+    for idx, variant in enumerate(variants, 1):
         name = variant["name"]
         params = variant["params"]
+        print(f"  [{idx}/{len(variants)}] Testing variant: {name}")
+        
         img, labels = segment_variant(frame, **params)
 
         fig = qc_overlay(img, labels, f"frame {frame_index} / {name}")
@@ -272,9 +357,17 @@ def main(input_path, frame_index, output_dir):
         metrics_rows.append(metrics)
 
     metrics_df = pd.DataFrame(metrics_rows)
-    metrics_df.to_csv(output_dir / "variant_metrics.csv", index=False)
+    metrics_csv = output_dir / "variant_metrics.csv"
+    metrics_df.to_csv(metrics_csv, index=False)
 
+    print(f"\n{'='*60}")
     print(f"Saved {len(variants)} variants to: {output_dir}")
+    print(f"Metrics saved to: {metrics_csv}")
+    print(f"{'='*60}\n")
+    
+    # Print top results
+    print("Top 5 variants by label count:")
+    print(metrics_df.nlargest(5, "label_count")[["variant", "label_count", "coverage", "inside_outside_contrast"]])
 
 
 if __name__ == "__main__":
