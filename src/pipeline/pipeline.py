@@ -228,24 +228,44 @@ def normalize_frame(frame):
 # Cell Segmentation (Threshold + Watershed)
 # ============================================================================
 
-def segment_cells(imgs):
+def segment_cells(imgs, *, method=None, gaussian_sigma=None, min_cell_area=None,
+                   closing_disk=None, peak_footprint=None, label_expand_pixels=None,
+                   target_coverage=None, max_expand_iter=None, **cellpose_kwargs):
     """
     Segment cells using threshold + watershed.
 
     Args:
         imgs: (T, Y, X) image array
+        method: Override segmentation method ('cellpose' or 'watershed')
+        gaussian_sigma: Override Gaussian smoothing sigma
+        min_cell_area: Override minimum cell area
+        closing_disk: Override morphological closing disk size
+        peak_footprint: Override peak detection footprint
+        label_expand_pixels: Override label expansion distance
+        target_coverage: Override target coverage ratio
+        max_expand_iter: Override max expansion iterations
+        **cellpose_kwargs: Passed to segment_cells_cellpose() if method is cellpose
 
     Returns:
         masks: (T, Y, X) label array with cell IDs
     """
-    if SEGMENTATION_METHOD == "cellpose":
-        return segment_cells_cellpose(imgs)
+    _method = method if method is not None else SEGMENTATION_METHOD
+    if _method == "cellpose":
+        return segment_cells_cellpose(imgs, **cellpose_kwargs)
+
+    _gaussian_sigma = gaussian_sigma if gaussian_sigma is not None else GAUSSIAN_SIGMA
+    _min_cell_area = min_cell_area if min_cell_area is not None else MIN_CELL_AREA
+    _closing_disk = closing_disk if closing_disk is not None else CLOSING_DISK
+    _peak_footprint = peak_footprint if peak_footprint is not None else PEAK_FOOTPRINT
+    _label_expand_pixels = label_expand_pixels if label_expand_pixels is not None else LABEL_EXPAND_PIXELS
+    _target_coverage = target_coverage if target_coverage is not None else TARGET_COVERAGE
+    _max_expand_iter = max_expand_iter if max_expand_iter is not None else MAX_EXPAND_ITER
 
     masks = np.zeros_like(imgs, dtype=np.int32)
 
     for t in range(imgs.shape[0]):
         frame = normalize_frame(imgs[t])
-        smoothed = gaussian(frame, sigma=GAUSSIAN_SIGMA)
+        smoothed = gaussian(frame, sigma=_gaussian_sigma)
 
         try:
             thresh = threshold_otsu(smoothed)
@@ -253,13 +273,13 @@ def segment_cells(imgs):
             thresh = float(np.mean(smoothed))
 
         binary = smoothed > thresh
-        binary = remove_small_objects(binary, min_size=MIN_CELL_AREA)
-        binary = binary_closing(binary, disk(CLOSING_DISK))
+        binary = remove_small_objects(binary, min_size=_min_cell_area)
+        binary = binary_closing(binary, disk(_closing_disk))
 
         distance = ndimage.distance_transform_edt(binary)
         peaks = peak_local_max(
             distance,
-            footprint=np.ones((PEAK_FOOTPRINT, PEAK_FOOTPRINT)),
+            footprint=np.ones((_peak_footprint, _peak_footprint)),
             labels=binary,
         )
 
@@ -273,12 +293,12 @@ def segment_cells(imgs):
             labels = watershed(-distance, markers, mask=binary)
 
         # Grow labels slightly to better cover cell boundaries without merging.
-        if LABEL_EXPAND_PIXELS > 0:
-            labels = expand_labels(labels, distance=LABEL_EXPAND_PIXELS)
+        if _label_expand_pixels > 0:
+            labels = expand_labels(labels, distance=_label_expand_pixels)
 
         # If coverage is too low, expand labels iteratively to include bubble-rich interiors.
-        if TARGET_COVERAGE is not None:
-            labels = expand_labels_to_coverage(labels, TARGET_COVERAGE, MAX_EXPAND_ITER)
+        if _target_coverage is not None:
+            labels = expand_labels_to_coverage(labels, _target_coverage, _max_expand_iter)
 
         masks[t] = labels
 
@@ -297,23 +317,30 @@ def expand_labels_to_coverage(labels, target_coverage, max_iter):
     return labels
 
 
-def preprocess_cellpose_frame(frame):
+def preprocess_cellpose_frame(frame, *, bg_subtract=None, rb_radius=None, use_clahe=None):
     img = normalize_frame(frame)
 
-    if CELLPOSE_BG_SUBTRACT == "rolling_ball":
-        background = rolling_ball(img, radius=CELLPOSE_RB_RADIUS)
+    _bg_subtract = bg_subtract if bg_subtract is not None else CELLPOSE_BG_SUBTRACT
+    _rb_radius = rb_radius if rb_radius is not None else CELLPOSE_RB_RADIUS
+    _use_clahe = use_clahe if use_clahe is not None else CELLPOSE_USE_CLAHE
+
+    if _bg_subtract == "rolling_ball":
+        background = rolling_ball(img, radius=_rb_radius)
         img = img - background
         img = normalize_frame(img)
 
-    if CELLPOSE_USE_CLAHE:
+    if _use_clahe:
         img = equalize_adapthist(img, clip_limit=0.02)
         img = normalize_frame(img)
 
     return img
 
 
-def postprocess_cellpose_masks(masks):
-    if CELLPOSE_FILL_HOLES_AREA <= 0 and CELLPOSE_CLOSING_DISK <= 0:
+def postprocess_cellpose_masks(masks, *, fill_holes_area=None, closing_disk=None):
+    _fill_holes_area = fill_holes_area if fill_holes_area is not None else CELLPOSE_FILL_HOLES_AREA
+    _closing_disk = closing_disk if closing_disk is not None else CELLPOSE_CLOSING_DISK
+
+    if _fill_holes_area <= 0 and _closing_disk <= 0:
         return masks
 
     processed = masks.copy()
@@ -322,32 +349,42 @@ def postprocess_cellpose_masks(masks):
         if label_id == 0:
             continue
         region = processed == label_id
-        if CELLPOSE_FILL_HOLES_AREA > 0:
-            region = remove_small_holes(region, area_threshold=CELLPOSE_FILL_HOLES_AREA)
-        if CELLPOSE_CLOSING_DISK > 0:
-            region = binary_closing(region, disk(CELLPOSE_CLOSING_DISK))
+        if _fill_holes_area > 0:
+            region = remove_small_holes(region, area_threshold=_fill_holes_area)
+        if _closing_disk > 0:
+            region = binary_closing(region, disk(_closing_disk))
         processed[processed == label_id] = 0
         processed[region] = label_id
 
     return processed
 
 
-def segment_cells_cellpose(imgs):
+def segment_cells_cellpose(imgs, *, model_type=None, diameter=None,
+                           cellprob_threshold=None, flow_threshold=None,
+                           min_size=None, bg_subtract=None, rb_radius=None,
+                           use_clahe=None, fill_holes_area=None, closing_disk=None):
     if models is None:
         raise RuntimeError("Cellpose is not available. Install cellpose or change SEGMENTATION_METHOD.")
 
-    model = models.CellposeModel(model_type=CELLPOSE_MODEL_TYPE)
+    _model_type = model_type if model_type is not None else CELLPOSE_MODEL_TYPE
+    _diameter = diameter if diameter is not None else CELLPOSE_DIAMETER
+    _cellprob_threshold = cellprob_threshold if cellprob_threshold is not None else CELLPOSE_CELLPROB_THRESHOLD
+    _flow_threshold = flow_threshold if flow_threshold is not None else CELLPOSE_FLOW_THRESHOLD
+    _min_size = min_size if min_size is not None else CELLPOSE_MIN_SIZE
+
+    model = models.CellposeModel(model_type=_model_type)
     masks = np.zeros_like(imgs, dtype=np.int32)
 
     for t in range(imgs.shape[0]):
-        img = preprocess_cellpose_frame(imgs[t])
+        img = preprocess_cellpose_frame(imgs[t], bg_subtract=bg_subtract,
+                                         rb_radius=rb_radius, use_clahe=use_clahe)
         result = model.eval(
             img,
             channels=[0, 0],
-            diameter=CELLPOSE_DIAMETER,
-            cellprob_threshold=CELLPOSE_CELLPROB_THRESHOLD,
-            flow_threshold=CELLPOSE_FLOW_THRESHOLD,
-            min_size=CELLPOSE_MIN_SIZE,
+            diameter=_diameter,
+            cellprob_threshold=_cellprob_threshold,
+            flow_threshold=_flow_threshold,
+            min_size=_min_size,
         )
 
         if isinstance(result, tuple):
@@ -360,7 +397,9 @@ def segment_cells_cellpose(imgs):
         else:
             masks_t = result
 
-        masks[t] = postprocess_cellpose_masks(masks_t.astype(np.int32))
+        masks[t] = postprocess_cellpose_masks(masks_t.astype(np.int32),
+                                               fill_holes_area=fill_holes_area,
+                                               closing_disk=closing_disk)
 
     return masks
 
@@ -687,13 +726,16 @@ def preprocess_bubble_base(frame):
     return normalize_frame(img)
 
 
-def preprocess_rb_clahe(frame):
+def preprocess_rb_clahe(frame, *, rb_radius=None, clahe_clip=None):
+    _rb_radius = rb_radius if rb_radius is not None else BUBBLE_TH_RB_RADIUS
+    _clahe_clip = clahe_clip if clahe_clip is not None else BUBBLE_TH_CLAHE_CLIP
+
     img = normalize_frame(frame)
-    if BUBBLE_TH_RB_RADIUS and BUBBLE_TH_RB_RADIUS > 0:
-        background = rolling_ball(img, radius=BUBBLE_TH_RB_RADIUS)
+    if _rb_radius and _rb_radius > 0:
+        background = rolling_ball(img, radius=_rb_radius)
         img = img - background
         img = normalize_frame(img)
-    img = equalize_adapthist(img, clip_limit=BUBBLE_TH_CLAHE_CLIP)
+    img = equalize_adapthist(img, clip_limit=_clahe_clip)
     return normalize_frame(img)
 
 
@@ -725,56 +767,75 @@ def filter_bubble_labels(labels, min_area, max_area):
     return cleaned
 
 
-def detect_bubbles_tophat(frame_mask, frame_img, *, use_qc_params=False):
+def detect_bubbles_tophat(frame_mask, frame_img, *, use_qc_params=False,
+                          threshold=None, min_area=None, max_area=None):
     img = preprocess_bubble_frame(frame_img)
     if img.max() == 0:
         return np.zeros_like(frame_mask, dtype=np.int32)
 
-    threshold = BUBBLE_QC_THRESHOLD if use_qc_params else BUBBLE_THRESHOLD
-    binary = img > threshold
+    if threshold is not None:
+        _threshold = threshold
+    else:
+        _threshold = BUBBLE_QC_THRESHOLD if use_qc_params else BUBBLE_THRESHOLD
+    _min_area = min_area if min_area is not None else BUBBLE_MIN_AREA
+    _max_area = max_area if max_area is not None else BUBBLE_MAX_AREA
+
+    binary = img > _threshold
     binary &= (frame_mask > 0)
-    binary = remove_small_objects(binary, min_size=BUBBLE_MIN_AREA)
+    binary = remove_small_objects(binary, min_size=_min_area)
 
     labels = ndimage.label(binary)[0]
-    labels = filter_bubble_labels(labels, BUBBLE_MIN_AREA, BUBBLE_MAX_AREA)
+    labels = filter_bubble_labels(labels, _min_area, _max_area)
     return labels
 
 
-def detect_bubbles_gradient_ws(frame_mask, frame_img, *, use_qc_params=False):
+def detect_bubbles_gradient_ws(frame_mask, frame_img, *, use_qc_params=False,
+                                smooth_sigma=None, ws_smooth_sigma=None,
+                                ws_intensity_threshold=None, ws_marker_quantile=None,
+                                min_area=None, max_area=None):
+    _smooth_sigma = smooth_sigma if smooth_sigma is not None else BUBBLE_CELLPOSE_SMOOTH_SIGMA
+    _ws_smooth_sigma = ws_smooth_sigma if ws_smooth_sigma is not None else BUBBLE_WS_SMOOTH_SIGMA
+    _ws_intensity_threshold = ws_intensity_threshold if ws_intensity_threshold is not None else BUBBLE_WS_INTENSITY_THRESHOLD
+    _ws_marker_quantile = ws_marker_quantile if ws_marker_quantile is not None else BUBBLE_WS_MARKER_QUANTILE
+    _min_area = min_area if min_area is not None else BUBBLE_MIN_AREA
+    _max_area = max_area if max_area is not None else BUBBLE_MAX_AREA
+
     img = preprocess_bubble_base(frame_img)
-    if BUBBLE_CELLPOSE_SMOOTH_SIGMA and BUBBLE_CELLPOSE_SMOOTH_SIGMA > 0:
-        img = gaussian(img, sigma=BUBBLE_CELLPOSE_SMOOTH_SIGMA)
+    if _smooth_sigma and _smooth_sigma > 0:
+        img = gaussian(img, sigma=_smooth_sigma)
     img = normalize_frame(1.0 - img)
     if img.max() == 0:
         return np.zeros_like(frame_mask, dtype=np.int32)
 
-    smooth = gaussian(img, sigma=BUBBLE_WS_SMOOTH_SIGMA)
+    smooth = gaussian(img, sigma=_ws_smooth_sigma)
     gradient = sobel(smooth)
 
-    threshold = BUBBLE_WS_INTENSITY_THRESHOLD
+    threshold = _ws_intensity_threshold
     cell_vals = smooth[frame_mask > 0]
-    if cell_vals.size > 0 and BUBBLE_WS_MARKER_QUANTILE is not None:
-        threshold = float(np.quantile(cell_vals, BUBBLE_WS_MARKER_QUANTILE))
+    if cell_vals.size > 0 and _ws_marker_quantile is not None:
+        threshold = float(np.quantile(cell_vals, _ws_marker_quantile))
 
     markers = smooth < threshold
     markers &= (frame_mask > 0)
-    markers = remove_small_objects(markers, min_size=BUBBLE_MIN_AREA)
+    markers = remove_small_objects(markers, min_size=_min_area)
     marker_labels = ndimage.label(markers)[0]
     if marker_labels.max() == 0:
         return np.zeros_like(frame_mask, dtype=np.int32)
 
     labels = watershed(gradient, marker_labels, mask=(frame_mask > 0))
-    labels = filter_bubble_labels(labels, BUBBLE_MIN_AREA, BUBBLE_MAX_AREA)
+    labels = filter_bubble_labels(labels, _min_area, _max_area)
     return labels
 
 
-def detect_bubbles_rb_clahe(frame_mask, frame_img, *, use_qc_params=False):
-    pre = preprocess_rb_clahe(frame_img)
+def detect_bubbles_rb_clahe(frame_mask, frame_img, *, use_qc_params=False,
+                            thresh=None, min_area=None, max_area=None,
+                            min_circularity=None, rb_radius=None, clahe_clip=None):
+    pre = preprocess_rb_clahe(frame_img, rb_radius=rb_radius, clahe_clip=clahe_clip)
 
-    thresh = BUBBLE_TH_THRESH
-    min_area = BUBBLE_TH_MIN_AREA
-    max_area = BUBBLE_TH_MAX_AREA
-    min_circularity = BUBBLE_TH_MIN_CIRCULARITY
+    _thresh = thresh if thresh is not None else BUBBLE_TH_THRESH
+    _min_area = min_area if min_area is not None else BUBBLE_TH_MIN_AREA
+    _max_area = max_area if max_area is not None else BUBBLE_TH_MAX_AREA
+    _min_circularity = min_circularity if min_circularity is not None else BUBBLE_TH_MIN_CIRCULARITY
 
     filtered = np.zeros_like(frame_mask, dtype=np.int32)
     next_label = 1
@@ -793,9 +854,9 @@ def detect_bubbles_rb_clahe(frame_mask, frame_img, *, use_qc_params=False):
         pre_roi = pre[y_min:y_max, x_min:x_max]
         cell_roi = cell_region[y_min:y_max, x_min:x_max]
 
-        binary = (pre_roi < thresh) & cell_roi
+        binary = (pre_roi < _thresh) & cell_roi
         binary = binary_opening(binary, disk(1))
-        binary = remove_small_objects(binary, min_size=min_area)
+        binary = remove_small_objects(binary, min_size=_min_area)
 
         labels = ndimage.label(binary)[0]
         if labels.max() == 0:
@@ -803,13 +864,13 @@ def detect_bubbles_rb_clahe(frame_mask, frame_img, *, use_qc_params=False):
 
         for prop in regionprops(labels):
             area = int(prop.area)
-            if area < min_area:
+            if area < _min_area:
                 continue
-            if max_area is not None and area > max_area:
+            if _max_area is not None and area > _max_area:
                 continue
             perimeter = float(prop.perimeter) if prop.perimeter > 0 else 1.0
             circularity = float(4.0 * np.pi * area / (perimeter ** 2))
-            if circularity < min_circularity:
+            if circularity < _min_circularity:
                 continue
 
             mask = labels == prop.label
@@ -821,12 +882,23 @@ def detect_bubbles_rb_clahe(frame_mask, frame_img, *, use_qc_params=False):
     return filtered
 
 
-def detect_bubbles_cellpose(frame_mask, frame_img):
+def detect_bubbles_cellpose(frame_mask, frame_img, *, model_type=None,
+                            diameter=None, cellprob_threshold=None,
+                            flow_threshold=None, min_size=None,
+                            min_area=None, max_area=None):
     if models is None:
         raise RuntimeError("Cellpose is not available. Install cellpose or change BUBBLE_METHOD.")
 
+    _model_type = model_type if model_type is not None else BUBBLE_CELLPOSE_MODEL_TYPE
+    _diameter = diameter if diameter is not None else BUBBLE_CELLPOSE_DIAMETER
+    _cellprob_threshold = cellprob_threshold if cellprob_threshold is not None else BUBBLE_CELLPOSE_CELLPROB_THRESHOLD
+    _flow_threshold = flow_threshold if flow_threshold is not None else BUBBLE_CELLPOSE_FLOW_THRESHOLD
+    _min_size = min_size if min_size is not None else BUBBLE_CELLPOSE_MIN_SIZE
+    _min_area = min_area if min_area is not None else BUBBLE_MIN_AREA
+    _max_area = max_area if max_area is not None else BUBBLE_MAX_AREA
+
     img = preprocess_bubble_base(frame_img)
-    model = models.CellposeModel(model_type=BUBBLE_CELLPOSE_MODEL_TYPE)
+    model = models.CellposeModel(model_type=_model_type)
 
     bubble_labels = np.zeros_like(frame_mask, dtype=np.int32)
     next_label = 1
@@ -849,10 +921,10 @@ def detect_bubbles_cellpose(frame_mask, frame_img):
         result = model.eval(
             cell_img,
             channels=[0, 0],
-            diameter=BUBBLE_CELLPOSE_DIAMETER,
-            cellprob_threshold=BUBBLE_CELLPOSE_CELLPROB_THRESHOLD,
-            flow_threshold=BUBBLE_CELLPOSE_FLOW_THRESHOLD,
-            min_size=BUBBLE_CELLPOSE_MIN_SIZE,
+            diameter=_diameter,
+            cellprob_threshold=_cellprob_threshold,
+            flow_threshold=_flow_threshold,
+            min_size=_min_size,
         )
 
         if isinstance(result, tuple):
@@ -871,35 +943,40 @@ def detect_bubbles_cellpose(frame_mask, frame_img):
             bubble_labels[y_min:y_max, x_min:x_max][masks == bubble_id] = next_label
             next_label += 1
 
-    bubble_labels = filter_bubble_labels(bubble_labels, BUBBLE_MIN_AREA, BUBBLE_MAX_AREA)
+    bubble_labels = filter_bubble_labels(bubble_labels, _min_area, _max_area)
     return bubble_labels
 
 
-def analyze_bubbles_in_frame(frame_mask, frame_img, *, return_labels=False):
+def analyze_bubbles_in_frame(frame_mask, frame_img, *, return_labels=False,
+                             bubble_method=None, **bubble_kwargs):
     """
     Detect bubbles in all cells of a frame.
 
     Args:
         frame_mask: 2D label array
         frame_img: 2D image array
+        bubble_method: Override bubble detection method
+        **bubble_kwargs: Passed to the selected bubble detection function
 
     Returns:
         results: list of dicts with [label, bubble_count, bubble_area, ...]
     """
+    _method = bubble_method if bubble_method is not None else BUBBLE_METHOD
+
     results = []
 
     bubble_labels = None
     bubble_owner = {}
     bubble_area_map = {}
 
-    if BUBBLE_METHOD == "tophat":
-        bubble_labels = detect_bubbles_tophat(frame_mask, frame_img)
-    elif BUBBLE_METHOD == "gradient_ws":
-        bubble_labels = detect_bubbles_gradient_ws(frame_mask, frame_img)
-    elif BUBBLE_METHOD == "cellpose":
-        bubble_labels = detect_bubbles_cellpose(frame_mask, frame_img)
-    elif BUBBLE_METHOD == "rb_clahe":
-        bubble_labels = detect_bubbles_rb_clahe(frame_mask, frame_img)
+    if _method == "tophat":
+        bubble_labels = detect_bubbles_tophat(frame_mask, frame_img, **bubble_kwargs)
+    elif _method == "gradient_ws":
+        bubble_labels = detect_bubbles_gradient_ws(frame_mask, frame_img, **bubble_kwargs)
+    elif _method == "cellpose":
+        bubble_labels = detect_bubbles_cellpose(frame_mask, frame_img, **bubble_kwargs)
+    elif _method == "rb_clahe":
+        bubble_labels = detect_bubbles_rb_clahe(frame_mask, frame_img, **bubble_kwargs)
 
     if bubble_labels is not None:
         bubble_ids = np.unique(bubble_labels)
@@ -923,7 +1000,7 @@ def analyze_bubbles_in_frame(frame_mask, frame_img, *, return_labels=False):
         cell_region = (frame_mask == label_id)
         cell_size = int(np.sum(cell_region))
 
-        if BUBBLE_METHOD in {"tophat", "gradient_ws", "cellpose", "rb_clahe"}:
+        if _method in {"tophat", "gradient_ws", "cellpose", "rb_clahe"}:
             owned = [b_id for b_id, owner in bubble_owner.items() if owner == label_id]
             bubble_count = int(len(owned))
             bubble_area = float(np.sum([bubble_area_map[b_id] for b_id in owned]))
