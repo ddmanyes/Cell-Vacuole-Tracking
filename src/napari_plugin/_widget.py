@@ -14,17 +14,20 @@ import numpy as np
 from magicgui.widgets import (
     ComboBox,
     Container,
+    FileEdit,
     FloatSlider,
     FloatSpinBox,
     Label,
     PushButton,
     SpinBox,
+    Table,
     create_widget,
 )
 from qtpy.QtWidgets import QProgressBar, QWidget, QVBoxLayout
 
 from src.pipeline.pipeline import load_config, CONFIG
 
+from ._analysis import compute_summary_stats, merge_track_and_bubbles
 from ._layer_utils import update_or_create_labels, update_or_create_tracks
 from ._worker import run_single_frame, run_full_video
 
@@ -55,6 +58,8 @@ class CellVacuoleWidget(QWidget):
 
         # Reload config to get freshest values
         load_config()
+
+        self.last_results_df = None  # Store results for export
 
         self._build_ui()
         self._connect_signals()
@@ -192,10 +197,27 @@ class CellVacuoleWidget(QWidget):
             self.status_label,
         ])
 
+        # === Section 4: Analysis ============================================
+        self.ana_header = Label(value="── 分析 (Analysis) ──")
+
+        self.table = Table(value=[])
+        self.table.read_only = True
+        self.table.min_height = 150
+
+        self.btn_export = PushButton(text="💾 Export CSV")
+        self.btn_export.enabled = False
+
+        self.ana_container = Container(widgets=[
+            self.ana_header,
+            self.table,
+            self.btn_export,
+        ])
+
         # === Assemble ========================================================
         layout.addWidget(self.seg_container.native)
         layout.addWidget(self.bub_container.native)
         layout.addWidget(self.exec_container.native)
+        layout.addWidget(self.ana_container.native)
         layout.addWidget(self.progress)
         layout.addStretch()
 
@@ -210,6 +232,7 @@ class CellVacuoleWidget(QWidget):
         self.bub_method.changed.connect(self._update_bub_visibility)
         self.btn_test_frame.changed.connect(self._on_test_frame)
         self.btn_run_video.changed.connect(self._on_run_video)
+        self.btn_export.changed.connect(self._on_export)
 
     # ---- Visibility Logic --------------------------------------------------
 
@@ -374,10 +397,38 @@ class CellVacuoleWidget(QWidget):
                 f"{n_cells} 細胞, {n_tracks} 軌跡, {n_bubbles} 泡泡"
             )
 
+            # Update Analysis Table
+            merged_df = merge_track_and_bubbles(track_df, all_results)
+            self.last_results_df = merged_df
+            
+            if not merged_df.empty:
+                summary_df = compute_summary_stats(merged_df)
+                self.table.value = summary_df.to_dict("list")
+                self.btn_export.enabled = True
+            else:
+                self.table.value = []
+                self.btn_export.enabled = False
+
     def _on_video_finished(self):
         self.btn_run_video.enabled = True
         self.btn_test_frame.enabled = True
         self.progress.setVisible(False)
+
+    def _on_export(self, *_):
+        if self.last_results_df is None or self.last_results_df.empty:
+            return
+
+        from qtpy.QtWidgets import QFileDialog
+
+        path, _ = QFileDialog.getSaveFileName(
+            self, "Save Analysis Results", "results.csv", "CSV Files (*.csv)"
+        )
+        if path:
+            try:
+                self.last_results_df.to_csv(path, index=False)
+                self.status_label.value = f"💾 已匯出至 {Path(path).name}"
+            except Exception as e:
+                self.status_label.value = f"❌ 匯出失敗: {e}"
 
     # ---- Error Handling ----------------------------------------------------
 
