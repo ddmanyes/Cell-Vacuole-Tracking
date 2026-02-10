@@ -71,7 +71,91 @@ uv run src/tests/cellpose_frame_test.py --input "data/bafA1/Group 1_wellA1_RI_MI
 3. If detecting too much background noise, increase cellprob_threshold
 4. Test on multiple frames to ensure consistency
 
-## Step 2: Bubble Detection Testing
+## Step 2: Cell Segmentation Parameter Sweep
+
+### Purpose
+
+Test multiple cell segmentation parameter combinations to find the optimal settings for your data. This is useful when Cellpose results are not ideal or you want to use traditional segmentation methods.
+
+### How to Run
+
+```bash
+uv run src/tests/param_sweep.py --input "data/bafA1/Group 1_wellA1_RI_MIP_stitched.tiff" --frame 0
+```
+
+### Customizing Parameters
+
+**Recommended**: Edit `config/pipeline_params.yaml` to customize parameter sweeps:
+
+```yaml
+segmentation_sweep:
+  baseline:
+    gaussian_sigma: 1.0          # 高斯平滑的標準差
+    min_cell_area: 200           # 最小細胞面積
+    peak_min_distance: 7         # 細胞中心最小間距
+    # ... more parameters
+  
+  variants:
+    - name: clahe_only
+      params:
+        use_clahe: true
+    
+    - name: custom_test          # Add your own variants!
+      params:
+        peak_min_distance: 12
+        use_clahe: true
+```
+
+**Key Parameters and Their Effects**:
+
+- **`peak_min_distance`**: Controls cell splitting granularity
+  - Too small → over-segmentation (one cell split into multiple)
+  - Too large → under-segmentation (multiple cells merged)
+  - Recommended: cell diameter / 10 to / 5 (e.g., 5-20)
+
+- **`min_cell_area`**: Filters noise by removing small objects
+  - Adjust based on minimum expected cell size (50-500 pixels)
+
+- **`closing_disk`**: Connects fragmented cell boundaries
+  - Larger values → stronger connection of gaps
+  - Recommended: 2-7
+
+- **`use_clahe`**: Enhances local contrast
+  - Use when image has low contrast or uneven illumination
+
+- **`bg_subtract`**: Background removal method
+  - `"gaussian"`: Smooth background estimation
+  - `"rolling_ball"`: Better for cellular images
+  - `rb_radius` should be ~half of cell diameter
+
+### Output Files
+
+- `results/variants/variant_<name>.png`: QC overlays for each parameter set
+- `results/variants/variant_metrics.csv`: Quantitative comparison table
+
+### How to Evaluate Results
+
+1. **Check `variant_metrics.csv`**:
+   - `label_count`: Should match expected cell count
+   - `coverage`: Typically 0.3-0.7 is reasonable
+   - `inside_outside_contrast`: Higher = better cell/background separation
+
+2. **Visually inspect PNG overlays**:
+   - Cell boundaries should align with actual cells
+   - No over-segmentation or under-segmentation
+   - No excessive background noise
+
+3. **Common Problems and Solutions**:
+   - **Over-segmentation** → Increase `peak_min_distance`
+   - **Under-segmentation** → Decrease `peak_min_distance`
+   - **Too much noise** → Increase `min_cell_area` or enable `bg_subtract`
+   - **Incomplete boundaries** → Increase `closing_disk`
+   - **Uneven illumination** → Use `adaptive_threshold` variant
+
+4. **Update pipeline parameters**:
+   - Once you find optimal settings, update them in `config/pipeline_params.yaml` under `cellpose` or `segmentation` section
+
+## Step 3: Bubble Detection Testing
 
 ### Purpose
 
