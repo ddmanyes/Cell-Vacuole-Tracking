@@ -42,6 +42,19 @@ graph TB
 
 **關鍵設計原則**：Plugin 層只做 UI 包裝，所有科學運算由現有 `pipeline.py` 提供。
 
+### 0.1 視覺設計哲學 (Visual Philosophy)
+
+> 基於 `ui_design_philosophy.md` 的核心指導原則，打造專業科學儀器般的介面。
+
+* **Bio-Computational Clarity:** 介面不僅是控制面板，而是精密的科學儀器。設計語言強調結構、邏輯與清晰度，拒絕多餘裝飾。
+* **Dark Mode as Canvas:** 採用 Napari 預設的深灰色調 (`#262930`) 作為基底，減少長時間分析的視覺疲勞。所有圖表背景需與介面融合，文字採用淺灰 (`#d6d6d6`)。
+* **Data Luminescence (數據發光):**
+  * **Cell Masks:** 使用高對比 **Cyan (青色)**，代表細胞結構。
+  * **Vacuoles:** 使用 **Red/Magenta (洋紅/紅色)**，確保微小目標在細胞內清晰可見。
+  * **Tracks:** 使用 **Yellow/Lime (黃綠色)**，標示動態軌跡。
+* **Modular Rigidity (模組化佈局):** 控制面板分為明確的功能區塊（Segmentation, Detection, Execution），像物理儀器上的模組一樣排列整齊。
+* **Typographic Constancy:** 數據表格使用 **Monospace (等寬字體)** 確保數字對齊。標籤文字簡潔有力，依靠層級（粗細/透明度）區分重要性。
+
 ---
 
 ## 1. 可直接復用的現有函數
