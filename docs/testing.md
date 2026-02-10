@@ -5,6 +5,7 @@ This guide provides a systematic approach to testing and optimizing the cell vac
 ## Overview
 
 The testing workflow follows these steps:
+
 1. **Cell Segmentation Testing** - Validate Cellpose parameters for accurate cell detection
 2. **Bubble Detection Testing** - Optimize bubble detection parameters within cells
 3. **Full Pipeline Validation** - Run complete analysis with chosen parameters
@@ -13,9 +14,11 @@ The testing workflow follows these steps:
 ## Step 1: Cell Segmentation Testing (Cellpose)
 
 ### Purpose
+
 Test Cellpose segmentation parameters to ensure cells are accurately detected before proceeding to bubble analysis.
 
 ### How to Run
+
 Use the cellpose frame test script:
 
 ```bash
@@ -25,6 +28,7 @@ uv run src/tests/cellpose_frame_test.py --input "data/bafA1/Group 1_wellA1_RI_MI
 ### Adjustable Parameters
 
 #### Cellpose Model Parameters
+
 - **model_type**: `"cyto"` (cytoplasm) or `"nuclei"` (nuclei) - use `"cyto"` for cell segmentation
 - **diameter**: Expected cell diameter in pixels (default: 100)
   - Measure a few cells in your image to estimate
@@ -36,6 +40,7 @@ uv run src/tests/cellpose_frame_test.py --input "data/bafA1/Group 1_wellA1_RI_MI
   - Affects boundary detection precision
 
 #### Preprocessing Parameters
+
 - **normalize**: Whether to normalize image intensity (default: True)
 - **sharpen**: Apply sharpening filter (default: False)
 - **smooth**: Apply smoothing filter (default: False)
@@ -54,11 +59,13 @@ uv run src/tests/cellpose_frame_test.py --input "data/bafA1/Group 1_wellA1_RI_MI
    - Compare with manual counting if possible
 
 ### Output Files
+
 - `results/cellpose/cellpose_frame_<n>_d<diameter>.png`: Segmentation overlay
 - `results/cellpose/cellpose_frame_<n>_d<diameter>_masks.png`: Binary masks
 - `results/cellpose/cellpose_frame_<n>_d<diameter>_flows.png`: Flow fields
 
 ### Parameter Optimization Tips
+
 1. Start with default diameter=100, adjust based on your cells
 2. If cells are touching, increase flow_threshold
 3. If detecting too much background noise, increase cellprob_threshold
@@ -67,27 +74,87 @@ uv run src/tests/cellpose_frame_test.py --input "data/bafA1/Group 1_wellA1_RI_MI
 ## Step 2: Bubble Detection Testing
 
 ### Purpose
+
 Test bubble detection parameters within segmented cells to optimize vacuole identification.
 
 ### How to Run
 
 #### Single Frame Preprocessing Comparison
+
 ```bash
 uv run src/tests/bubble_frame_preproc_test.py --input "data/bafA1/Group 1_wellA1_RI_MIP_stitched.tiff" --frame 0
 ```
 
 #### Single Cell Parameter Sweeps
+
 ```bash
 uv run src/tests/bubble_single_cell_test.py --input "data/bafA1/Group 1_wellA1_RI_MIP_stitched.tiff" --frame 0 --cell-id 0
 ```
 
+#### Automated Parameter Sweep (Recommended)
+
+**Purpose**: Systematically test multiple parameter combinations on a single frame to find optimal bubble detection settings. This script automates the testing process and generates quantitative metrics for comparison.
+
+**How to Run**:
+
+```bash
+uv run src/tests/bubble_param_sweep.py --input "data/bafA1/Group 1_wellA1_RI_MIP_stitched.tiff" --frame 0
+```
+
+**Parameter Sweeps Included**:
+The script automatically tests multiple parameter sets including:
+
+- **Baseline**: Uses parameters from `config/pipeline_params.yaml`
+- **Threshold sweep**: Tests multiple threshold values (default: 0.25, 0.30, 0.35, 0.40)
+- **Min area sweep**: Tests different minimum bubble sizes (default: 5, 10, 15, 20 pixels)
+- **CLAHE clip sweep**: Tests various contrast enhancement levels (default: 0.04, 0.06, 0.08, 0.10, 0.15)
+- **Recommended presets**: `sensitive_small` (for small bubbles) and `balanced` (general purpose)
+
+**Sweep Ranges Customization**:
+You can customize the parameter ranges in `config/pipeline_params.yaml`:
+
+```yaml
+bubble_sweep:
+  thresh: [0.25, 0.30, 0.35, 0.40]
+  min_area: [5, 10, 15, 20]
+  clahe_clip: [0.04, 0.06, 0.08, 0.10, 0.15]
+```
+
+**Output Files**:
+
+- `results/bubble_param_sweep/<variant_name>.png`: QC overlay for each parameter combination
+- `results/bubble_param_sweep/bubble_param_metrics.csv`: Quantitative metrics table with:
+  - `total_bubbles`: Total number of bubbles detected
+  - `total_bubble_area`: Total area of all bubbles
+  - `cells_with_bubbles`: Number of cells containing at least one bubble
+  - `total_cells`: Total number of cells in the frame
+  - `avg_bubbles_per_cell`: Average bubbles per cell
+  - `avg_bubble_area`: Average bubble size
+
+**How to Evaluate Results**:
+
+1. Review the metrics CSV to identify parameter sets with reasonable bubble counts
+2. Visually inspect the corresponding PNG overlays to verify accuracy
+3. Balance sensitivity (detecting all real bubbles) with specificity (avoiding false positives)
+4. Consider biological context: expected bubble sizes and frequency
+
+**Optimization Tips**:
+
+- Start with the baseline and compare against sweep variants
+- Look for parameter combinations that give stable results across multiple frames
+- Use `avg_bubbles_per_cell` as a quick quality metric
+- Check `avg_bubble_area` to ensure detected bubbles are biologically plausible
+- The script prints top 5 variants by total bubbles detected for quick reference
+
 ### Adjustable Parameters
 
 #### Preprocessing Methods
+
 - **rb_clahe**: Rolling ball background subtraction + CLAHE enhancement (recommended)
 - **dog_clahe**: Difference of Gaussians + CLAHE enhancement
 
 #### rb_clahe Parameters
+
 - **rb_radius**: Rolling ball radius for background subtraction (default: 50)
   - Larger values: remove larger background structures
   - Smaller values: preserve more local variations
@@ -99,6 +166,7 @@ uv run src/tests/bubble_single_cell_test.py --input "data/bafA1/Group 1_wellA1_R
   - Larger grids: more uniform enhancement
 
 #### Thresholding Parameters
+
 - **threshold**: Binary threshold value (default: 0.15)
   - Lower values: detect more bubbles (may include noise)
   - Higher values: detect fewer, more confident bubbles
@@ -108,6 +176,7 @@ uv run src/tests/bubble_single_cell_test.py --input "data/bafA1/Group 1_wellA1_R
   - 1.0 = perfect circle, lower values allow more irregular shapes
 
 #### Morphological Parameters
+
 - **morph_opening**: Apply morphological opening (default: True)
 - **morph_closing**: Apply morphological closing (default: True)
 - **morph_disk_size**: Morphological operation disk size (default: 2)
@@ -133,11 +202,13 @@ uv run src/tests/bubble_single_cell_test.py --input "data/bafA1/Group 1_wellA1_R
 ### Output Files
 
 #### bubble_frame_preproc_test.py
+
 - `results/bubble_preproc_frame/frame_<n>_compare.png`: Side-by-side comparison of methods
 - `results/bubble_preproc_frame/frame_<n>_rb_clahe_stats.csv`: Per-cell bubble statistics
 - `results/bubble_preproc_frame/frame_<n>_dog_clahe_stats.csv`: Per-cell bubble statistics
 
 #### bubble_single_cell_test.py
+
 - `results/bubble_single_cell/cell_<id>_frame_<n>.png`: Single cell analysis
 - `results/bubble_single_cell/cell_<id>_frame_<n>_clahe_sweep.png`: CLAHE parameter grid
 - `results/bubble_single_cell/cell_<id>_frame_<n>_threshold_sweep.png`: Threshold parameter grid
@@ -187,15 +258,18 @@ uv run src/pipeline/pipeline.py --input "data/bafA1/Group 1_wellA1_RI_MIP_stitch
 ### Validation Outputs
 
 #### CSV Files
+
 - `results/<input_stem>.csv`: Per-frame, per-cell bubble data
 - `results/summary.csv`: Overall statistics
 - `results/cell_summary.csv`: Per-cell aggregates
 
 #### QC Images
+
 - `results/qc/<input_stem>_qc.png`: Bubble detection overlay
 - `results/tracking_overlay.png`: Cell tracking visualization
 
 #### Intermediate Files
+
 - `results/intermediates/<input_stem>_intermediate.npz`: Saved masks and bubbles for fast QC
 
 ## Recommended Workflow
@@ -242,6 +316,6 @@ uv run src/pipeline/pipeline.py --input "data/bafA1/Group 1_wellA1_RI_MIP_stitch
 
 ## Reference
 
-- Cellpose documentation: https://cellpose.readthedocs.io/
-- scikit-image morphology: https://scikit-image.org/docs/stable/api/skimage.morphology.html
-- CLAHE: https://scikit-image.org/docs/stable/api/skimage.exposure.html#skimage.exposure.equalize_adapthist
+- Cellpose documentation: <https://cellpose.readthedocs.io/>
+- scikit-image morphology: <https://scikit-image.org/docs/stable/api/skimage.morphology.html>
+- CLAHE: <https://scikit-image.org/docs/stable/api/skimage.exposure.html#skimage.exposure.equalize_adapthist>
