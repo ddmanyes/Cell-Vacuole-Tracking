@@ -21,7 +21,14 @@ dependencies = [
     "cython",
     "opencv-python",
     "pyyaml",
+    "napari[all]>=0.4.19",
+    "magicgui>=0.8.0",
+    "qtpy",
+    "superqt",
 ]
+
+[project.entry-points."napari.manifest"]
+cell-vacuole-tracker = "src.napari_plugin:napari.yaml"
 
 [dependency-groups]
 dev = [

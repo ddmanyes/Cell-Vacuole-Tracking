@@ -1,0 +1,10 @@
+name: cell-vacuole-tracker
+display_name: Cell Vacuole Tracker
+contributions:
+  commands:
+    - id: cell-vacuole-tracker.widget
+      python_name: src.napari_plugin._widget:CellVacuoleWidget
+      title: Cell Vacuole Tracker
+  widgets:
+    - command: cell-vacuole-tracker.widget
+      display_name: Cell Vacuole Tracker
