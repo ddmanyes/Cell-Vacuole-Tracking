@@ -90,23 +90,38 @@ Recommended optional tools for development and testing (not in `pyproject.toml` 
 - `pytest`: For running unit tests (`src/tests`).
 - `jupyter`/`ipykernel`: For interactive notebooks.
 
+### Automated Development (/run)
+
+This project supports an autonomous pilot mode for executing complex implementation plans. This is useful for batch processing, parameter sweeps, or multi-step refactoring.
+
+- **Trigger**: Command the agent with `/run` to start the autonomous pilot.
+- **Workflow**:
+    1. **Plan Scanning**: Reads `IMPLEMENTATION_PLAN.md` for pending tasks.
+    2. **Autonomous Execution**: Automatically performs file modifications and updates.
+    3. **Trace Logging**: Actions are recorded in `execution_trace.md` with Git-based recovery links.
+    4. **Environment**: Automatically uses `uv run` for all Python operations.
+
+> [!TIP]
+> Use the recovery links in `execution_trace.md` to revert the project state to any specific step during the automated execution.
+
 ### Quick Start
 
 1. Install dependencies (recommended via uv)
- - Run `uv sync` to install all dependencies from `pyproject.toml`.
+   - Run `uv sync` to install all dependencies from `pyproject.toml`.
+
 2. Run the pipeline on the default dataset:
 
 ```bash
 uv run src/pipeline/pipeline.py --input "data/bafA1/Group 1_wellA1_RI_MIP_stitched.tiff"
 ```
 
-3. Limit frames for fast iteration:
+1. Limit frames for fast iteration:
 
 ```bash
 uv run src/pipeline/pipeline.py --input "data/bafA1/Group 1_wellA1_RI_MIP_stitched.tiff" --max-frames 10 --skip-tracking
 ```
 
-4. Save intermediate masks for fast QC reuse:
+1. Save intermediate masks for fast QC reuse:
 
 ```bash
 uv run src/pipeline/pipeline.py --input "data/bafA1/Group 1_wellA1_RI_MIP_stitched.tiff" --save-intermediates
@@ -143,19 +158,19 @@ uv run src/tests/track_single_cell_animation.py --tracking-csv sample/tracking_p
 H:/細胞偵測/.venv/Scripts/Activate.ps1
 ```
 
-3. Run with `uv` (recommended):
+1. Run with `uv` (recommended):
 
 ```powershell
 uv run src/pipeline/pipeline.py --input "data/bafA1/Group 1_wellA1_RI_MIP_stitched.tiff"
 ```
 
-4. If PowerShell blocks scripts, run:
+1. If PowerShell blocks scripts, run:
 
 ```powershell
 Set-ExecutionPolicy -Scope CurrentUser RemoteSigned
 ```
 
-5. For multi-line commands in PowerShell, use backtick `` ` `` (not `\`):
+1. For multi-line commands in PowerShell, use backtick `` ` `` (not `\`):
 
 ```powershell
 uv run src/tests/track_single_cell_animation.py `
