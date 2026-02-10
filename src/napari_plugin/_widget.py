@@ -25,7 +25,7 @@ from qtpy.QtWidgets import QProgressBar, QWidget, QVBoxLayout
 
 from src.pipeline.pipeline import load_config, CONFIG
 
-from ._layer_utils import update_or_create_labels
+from ._layer_utils import update_or_create_labels, update_or_create_tracks
 from ._worker import run_single_frame, run_full_video
 
 
@@ -361,15 +361,17 @@ class CellVacuoleWidget(QWidget):
             self.progress.setValue(current)
             self.status_label.value = f"⏳ {current}/{total} 幀..."
         elif item[0] == "done":
-            _, all_masks, all_bubble_labels, all_results = item
+            _, all_masks, all_bubble_labels, track_df, all_results = item
             update_or_create_labels(self.viewer, all_masks, "Cell Masks", opacity=0.4)
             update_or_create_labels(self.viewer, all_bubble_labels, "Bubble Labels", opacity=0.6)
+            update_or_create_tracks(self.viewer, track_df, "Cell Tracks")
 
             n_cells = len(np.unique(all_masks)) - 1
             n_bubbles = len(all_results)
+            n_tracks = track_df["tracked_id"].nunique() if not track_df.empty else 0
             self.status_label.value = (
                 f"✅ 完成 — {all_masks.shape[0]} 幀, "
-                f"{n_cells} 追蹤細胞, {n_bubbles} 泡泡事件"
+                f"{n_cells} 細胞, {n_tracks} 軌跡, {n_bubbles} 泡泡"
             )
 
     def _on_video_finished(self):

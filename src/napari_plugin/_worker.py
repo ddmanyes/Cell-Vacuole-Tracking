@@ -18,6 +18,7 @@ from src.pipeline.pipeline import (
     normalize_frame,
     segment_cells,
     segment_cells_cellpose,
+    track_cells,
 )
 
 
@@ -131,5 +132,8 @@ def run_full_video(
         # Progress update
         yield ("progress", t + 1, n_frames)
 
+    # --- 3. Track cells ------------------------------------------------------
+    track_df = track_cells(all_masks)
+
     # Final results
-    yield ("done", all_masks, all_bubble_labels, all_results)
+    yield ("done", all_masks, all_bubble_labels, track_df, all_results)
